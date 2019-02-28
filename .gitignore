@@ -1,2 +1,3 @@
 predictor/data/
 predictor/__pycache__/
+.vscode

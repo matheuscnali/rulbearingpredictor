@@ -289,3 +289,66 @@ def normalized_points(self, window_size, qty_to_show):
         print(sorted(big_data[0:30]))       
         
         return data[abs(data - np.mean(data)) < m * np.std(data)]
+
+
+""" HHT """
+def hht_marginal_spectrum(self, dataset, params):
+        
+        processed_data_path = 'hht_marginal_spectrum/hht_marginal_spectrum'
+        bearings_marginal_spectrum = dataset.load_processed_data(dataset, processed_data_path)
+        bearings_not_processed = params['bearings']
+        
+        if bearings_marginal_spectrum[0]:
+            bearings_marginal_spectrum = bearings_marginal_spectrum[1]
+
+            bearings_processed = list(map(int, list(bearings_marginal_spectrum.keys())))
+            bearings_not_processed = [x for x in params['bearings'] if x not in bearings_processed]
+
+            if bearings_not_processed == []:
+                return bearings_marginal_spectrum
+
+        else:
+            bearings_marginal_spectrum = OrderedDict()
+
+        for current_bearing in bearings_not_processed:
+            imfs_files = []
+            bearing_marginal_spectrum = []
+            bearing_files = dataset.bearings_files[str(current_bearing)]
+
+            # Calculating IMFs for each data file.
+            for bearing_file in bearing_files:      
+                data = bearing_file[params['vibration_signal']].values
+                decomposer = EMD(data)
+                imfs_files.append(decomposer.decompose())
+
+            # Calculating Hilbert transform for each IMF.
+            imfs_ht_files = []
+
+            for imfs_file in imfs_files:
+                imfs_ht_files.append(hilbert(imfs_file))
+                       
+            # Calculating Hilbert spectrum of each decomposition.
+            fs = params['sampling_frequency']
+            imfs_mag_spec_files = []
+
+            for imfs_ht_file in imfs_ht_files:
+                imfs_mag_spec_file = []
+                N = len(imfs_ht_file[0])
+                freqs = np.arange(N)*(fs/N)
+                freqs = freqs[0:int(N//2)]
+                for imf_ht_file in imfs_ht_file:
+                    fft_vals = fft(imf_ht_file)
+                    fft_theo = 2.0*np.abs(fft_vals/N)
+                    fft_theo = fft_theo[0:int(N//2)]
+                    imfs_mag_spec_file.append([freqs, fft_theo])
+                imfs_mag_spec_files.append(imfs_mag_spec_file)
+
+            # Calculating Hilbert marginal spectrum
+            for imfs_mag_spec_file in imfs_mag_spec_files:
+                bearing_marginal_spectrum.append([imfs_mag_spec_file[0][0], sum([x[1] for x in imfs_mag_spec_file])])
+
+            bearings_marginal_spectrum[str(current_bearing)] = bearing_marginal_spectrum
+
+        dataset.save_processed_data(bearings_marginal_spectrum, processed_data_path)
+
+        return bearings_marginal_spectrum

@@ -33,15 +33,17 @@ class Functions:
         def hht_marginal_spectrum_plot():
             
             data = data_processed['hht_marginal_spectrum']
+    
             for bearing_name, bearing_marginal_spectrum in data.items():
                 
                 N = len(bearing_marginal_spectrum)
-                ini = 10; middle = int(N//2); end = int(N-10)
+                ini = 10; middle = int(N//2-5); end = int(N-15)
                 freqs1, spectrum1 = bearing_marginal_spectrum[ini]
                 freqs2, spectrum2 = bearing_marginal_spectrum[middle]
                 freqs3, spectrum3 = bearing_marginal_spectrum[end]
 
                 fig, ax = plt.subplots(3, 1, sharex=True, sharey=True)
+                fig.dpi = 180; fig.figsize = (11,11)
                 ax[0].plot(freqs1, spectrum1)
                 ax[0].set_title('Bearing ' + bearing_name + ', beggining.')
                 ax[0].set_xlim(6000, 12000, 'c')
@@ -63,9 +65,11 @@ class Functions:
 
             rms_data = data_processed['rms']
             health_assesment_data = data_processed['health_assessment']
-            plt.figure()
-            for (rms_keys, rms), (_, health_assessment) in zip(rms_data.items(), health_assesment_data.items()):
-                plt.title('Correlation Coefficient - Bearing '+ str(int(rms_keys)+1))
+
+            for (rms_key, rms), (_, health_assessment) in zip(rms_data.items(), health_assesment_data.items()):
+                fig = plt.figure()
+                fig.dpi = 200; fig.figsize = (11,11)
+                plt.title('Correlation Coefficient - Bearing '+ str(int(rms_key)+1))
                 plt.plot(health_assessment['correlation_coefficients'], 'C2')
                 plt.plot(rms, 'C0')
                 ax_point = health_assessment['health_states']['fast_degradation'][0]
@@ -73,10 +77,22 @@ class Functions:
                 plt.axvline(ax_point, color='red')
                 plt.show()
 
+        def rms_plot():
+            rms_data = data_processed['rms']
+           
+            for rms_key, rms in rms_data.items():
+                fig = plt.figure()
+                plt.title('RMS - Bearing '+ str(int(rms_key)+1))
+                fig.dpi = 200; fig.figsize = (11,11)
+                plt.plot(rms, 'C0')
+                plt.show()
+
+
         plot_functions = {
             'fft_plot': fft_plot,
-           'hht_marginal_spectrum': hht_marginal_spectrum_plot,
-           'health_assessment': health_assessment_plot,
+            'hht_marginal_spectrum': hht_marginal_spectrum_plot,
+            'health_assessment': health_assessment_plot,
+            'rms': rms_plot
         }
 
         for result_name in params['results_to_show']:

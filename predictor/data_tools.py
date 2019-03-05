@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy
+import collections
+
 from matplotlib.pyplot import magnitude_spectrum
 from pyhht.emd import EMD
 from scipy.optimize import curve_fit
@@ -58,10 +60,10 @@ class DataSet:
 
         with open(processed_data_path, 'wb') as file:
             pickle.dump(data, file)
-   
-    def load_processed_data(self, processed_data_path):
 
-        processed_data_path = self.current_dir + '/predictor/data/Processed_Data/' + processed_data_path
+    def load_processed_data(self, dataset, processed_data_path):
+
+        processed_data_path = dataset.current_dir + '/predictor/data/Processed_Data/' + processed_data_path
 
         if(os.path.isfile(processed_data_path)):
             with open(processed_data_path, 'rb') as file:
@@ -72,46 +74,55 @@ class DataSet:
 
         processed_data_path = '/bearings_files/bearings_files_' + str(params['file_chunk_percentage'][0]) + '_' +str(params['file_chunk_percentage'][1])
 
-        dataset.bearings_files = dataset.load_processed_data(processed_data_path)
+        dataset.bearings_files = dataset.load_processed_data(dataset, processed_data_path)
+        bearings_not_loaded = params['bearings']
+
         if dataset.bearings_files[0]:
             dataset.bearings_files = dataset.bearings_files[1]
+            bearings_loaded = list(map(int, list(dataset.bearings_files.keys())))
+            bearings_not_loaded = [x for x in params['bearings'] if x not in bearings_loaded]
+            params['bearings'] = bearings_not_loaded
+
+            if bearings_not_loaded == []:
+                return
         else:
             dataset.bearings_files = {}
-            dataset.read_data(dataset, params)
+        
+        dataset.read_data(dataset, params)
 
     def read_data(self, dataset, params):
 
-        processed_data_path = 'bearings_files/bearings_files [' + str(params['file_chunk_percentage'][0]) + ',' + str(params['file_chunk_percentage'][1]) + ']'
+        processed_data_path = 'bearings_files/bearings_files_' + str(params['file_chunk_percentage'][0]) + '_' + str(params['file_chunk_percentage'][1])
        
         for current_bearing in params['bearings']:
             bearing_files = []
 
-            bearing_path = self.current_dir + str(self.dir_path + self.PHM_dataset[current_bearing])
-            self.files_path = [bearing_path + '/' + s for s in sorted(os.listdir(bearing_path))]
-            self.files_qty = len(self.files_path)
+            bearing_path = dataset.current_dir + str(dataset.dir_path + dataset.PHM_dataset[current_bearing])
+            dataset.files_path = [bearing_path + '/' + s for s in sorted(os.listdir(bearing_path))]
+            dataset.files_qty = len(dataset.files_path)
             
             # Resizing files_path.
-            ini = int(params['file_chunk_percentage'][0]*self.files_qty // 100)
-            end = int(params['file_chunk_percentage'][1]*self.files_qty // 100)
-            self.files_path = self.files_path[ini:end]
-            self.files_qty = len(self.files_path)
+            ini = int(params['file_chunk_percentage'][0]*dataset.files_qty // 100)
+            end = int(params['file_chunk_percentage'][1]*dataset.files_qty // 100)
+            dataset.files_path = dataset.files_path[ini:end]
+            dataset.files_qty = len(dataset.files_path)
 
-            for file_path in self.files_path:
+            for file_path in dataset.files_path:
                 with open(file_path, 'r') as file:
                         # Removed column 3 (micro-seconds).
                         read_data = pd.read_csv(file, usecols=[0, 1, 2, 4, 5], names=['hour', 'min', 'sec', 'vib_horizontal', 'vib_vertical'], header=None, float_precision='high')
                         bearing_files.append(read_data)
                             
-            self.bearings_files[str(current_bearing)] = bearing_files
+            dataset.bearings_files[str(current_bearing)] = bearing_files
             
         # Saving bearing files.
-        dataset.save_processed_data(bearing_files, processed_data_path)
+        dataset.save_processed_data(dataset.bearings_files, processed_data_path)
 
 class Functions:
 
     def bearings_fft(self, dataset, params):
         processed_data_path = 'bearings_fft/bearings_fft'
-        bearings_fft = dataset.load_processed_data(processed_data_path)
+        bearings_fft = dataset.load_processed_data(dataset, processed_data_path)
         bearings_not_processed = params['bearings']
 
         if bearings_fft[0]:
@@ -154,9 +165,9 @@ class Functions:
         return bearings_fft
 
     def hht_marginal_spectrum(self, dataset, params):
-        
+
         processed_data_path = 'hht_marginal_spectrum/hht_marginal_spectrum'
-        bearings_marginal_spectrum = dataset.load_processed_data(processed_data_path)
+        bearings_marginal_spectrum = dataset.load_processed_data(dataset, processed_data_path)
         bearings_not_processed = params['bearings']
         
         if bearings_marginal_spectrum[0]:
@@ -187,11 +198,47 @@ class Functions:
 
             for imfs_file in imfs_files:
                 imfs_ht_files.append(hilbert(imfs_file))
-                       
-            # Calculating magnitude spectrum of each decomposition.
+
+            #fs = params['sampling_frequency']
+            #files_instantaneous_phase = [np.unwrap(np.angle(imfs_ht_file)) for imfs_ht_file in imfs_ht_files]
+            #files_instantaneous_frequency = np.multiply(np.divide([np.diff(x) for x in files_instantaneous_phase], 2.0*np.pi), fs)
+            #files_instantaneous_frequency = [np.int_(x) for x in files_instantaneous_frequency]
+            #files_amplitude_envelope = np.abs(imfs_ht_files)
+            #
+            #for file_instantaneous_frequency, file_amplitude_envelope in zip(files_instantaneous_frequency, files_amplitude_envelope):
+            #    file_imfs_marginal_spectrum = []
+            #    for imf_instantaneous_frequency, imf_amplitude_envelope in zip(file_instantaneous_frequency, file_amplitude_envelope):
+            #            dups = collections.defaultdict(list)
+            #            
+            #            frequencies = []; spectrum = []
+            #            for i, e in enumerate(imf_instantaneous_frequency):
+            #                dups[e].append(i)
+            #            for freq, index in sorted(dups.items()):
+            #                time_integral = sum([imf_amplitude_envelope[x] for x in index])
+            #                frequencies.append(freq); spectrum.append(time_integral)
+            #            file_imfs_marginal_spectrum.append([frequencies, spectrum])
+            #    
+            #    imfs_frequencies = []; imfs_spectrum = []
+            #    for i, (imf_frequencies, imf_spectrum) in enumerate(file_imfs_marginal_spectrum):
+            #        if i < 5: #Setting the number of IMFs to calculate.
+            #            imfs_frequencies.extend(imf_frequencies)
+            #            imfs_spectrum.extend(imf_spectrum)
+            #
+            #    dups = collections.defaultdict(list)
+            #        
+            #    frequencies = []; spectrum = []
+            #    for i, e in enumerate(imfs_frequencies):
+            #        dups[e].append(i)
+            #    for freq, index in sorted(dups.items()):
+            #        time_integral = sum([imfs_spectrum[x] for x in index])
+            #        frequencies.append(freq); spectrum.append(time_integral)
+            #    bearing_marginal_spectrum.append([frequencies, spectrum])
+
+
+            # Calculating Hilbert spectrum of each decomposition.
             fs = params['sampling_frequency']
             imfs_mag_spec_files = []
-
+            
             for imfs_ht_file in imfs_ht_files:
                 imfs_mag_spec_file = []
                 N = len(imfs_ht_file[0])
@@ -203,8 +250,8 @@ class Functions:
                     fft_theo = fft_theo[0:int(N//2)]
                     imfs_mag_spec_file.append([freqs, fft_theo])
                 imfs_mag_spec_files.append(imfs_mag_spec_file)
-
-            # Calculating Hilbert spectrum
+            
+            # Calculating Hilbert marginal spectrum
             for imfs_mag_spec_file in imfs_mag_spec_files:
                 bearing_marginal_spectrum.append([imfs_mag_spec_file[0][0], sum([x[1] for x in imfs_mag_spec_file])])
 
@@ -217,7 +264,7 @@ class Functions:
     def health_assessment(self, dataset, params):
 
         processed_data_path = 'health_assessment/health_assessment'
-        bearings_health_data = dataset.load_processed_data(processed_data_path)
+        bearings_health_data = dataset.load_processed_data(dataset, processed_data_path)
         bearings_not_processed = params['bearings']
 
         # Checking data loaded.
@@ -268,7 +315,7 @@ class Functions:
         dataset.save_processed_data(bearings_health_data, processed_data_path)
 
         return bearings_health_data
-    
+
     def states_assesment(self, bearings_health_data):
         
         threshold_values_mean = 0
@@ -291,7 +338,7 @@ class Functions:
     def rms(self, dataset, params):
 
         processed_data_path = 'rms/rms'
-        bearings_rms = dataset.load_processed_data(processed_data_path)
+        bearings_rms = dataset.load_processed_data(dataset, processed_data_path)
         bearings_not_processed = params['bearings']
 
         if bearings_rms[0]:
@@ -310,13 +357,14 @@ class Functions:
             bearing_files = dataset.bearings_files[str(current_bearing)]
             bearing_rms = []
 
-            for i, bearing_file in enumerate(bearing_files):
+            for bearing_file in bearing_files:
                 data = bearing_file[params['vibration_signal']].values
                 # Calculating RMS.
                 bearing_rms.append(math.sqrt(np.mean(data**2)))
-            #bearing_rms =  savgol_filter(bearing_rms, 5, 3)
+            # Smoothing data.
+            bearing_rms =  savgol_filter(bearing_rms, 19, 3)
             bearings_rms[str(current_bearing)] = bearing_rms
-
+    
         dataset.save_processed_data(bearings_rms, processed_data_path)
 
         return bearings_rms
@@ -369,7 +417,7 @@ class Functions:
         correlation_coefficients_norm = self.normalize_data(correlation_coefficients, params)
 
         return correlation_coefficients_norm
-    
+
     def normalize_data(self, data, params):
 
         data = np.array(data)

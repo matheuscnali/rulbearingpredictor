@@ -1,4 +1,5 @@
 import data_tools
+import machine_learning_tools
 import show_results
 import numpy as np
 from config import CONF
@@ -7,8 +8,10 @@ import matplotlib.pyplot as plt
 class Predictor:
     dataset = data_tools.DataSet()
     data_F = data_tools.Functions()
+    neural_networks = machine_learning_tools.NeuralNetworks()
     show_results = show_results.Functions()
     data_processed = {}
+
 
     def __init__(self):
         pass
@@ -18,18 +21,12 @@ class Predictor:
         
         for function_name in data_processing_params.keys():
             
-            result = getattr(self.data_F, function_name) \
-                            (self.dataset, data_processing_params[function_name])
+            self.data_processed[function_name] = getattr(self.data_F, function_name) \
+                                                 (self.dataset, data_processing_params[function_name])
 
-            self.data_processed[function_name] = result
-
-    def create_models(self):
-        "Generate models"
-        pass
-
-    def predict(self):
-        """Train, validate and test models"""
-        pass
+    def predict(self, models_params, predictor_params):
+        self.neural_networks.create_models(self.data_processed, models_params)
+        self.neural_networks.predict(self.data_processed, models_params, predictor_params)
 
     def results(self, params):
         """Show predict results and compare with real signal"""
@@ -44,9 +41,8 @@ def main():
             predictor.dataset.load_bearing_data(predictor.dataset, method.load_data_params)
         
         predictor.data_processing(method.data_processing_params)
-        predictor.create_models()
-        predictor.predict()
-        predictor.results(method.show_results_params)
+        predictor.predict(method.models_params, method.predictor_params)
+        #predictor.results(method.show_results_params)
 
 if __name__ == '__main__':
     main()

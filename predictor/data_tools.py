@@ -280,7 +280,7 @@ class Functions:
                 for current_bearing in params['bearings']:
                     bearing_health_data = bearings_health_data[str(current_bearing)]
                     bearing_health_data['correlation_coefficients'] = self.correlation_coefficients(bearing_health_data, params)
-                bearings_health_data = self.states_assesment(bearings_health_data)
+                bearings_health_data = self.states_assesment(bearings_health_data, params)
 
                 return bearings_health_data
         
@@ -309,30 +309,39 @@ class Functions:
             bearings_health_data[str(current_bearing)] = bearing_health_data
         
         # Health states assessment
-        bearings_health_data = self.states_assesment(bearings_health_data)
+        bearings_health_data = self.states_assesment(bearings_health_data, params)
                     
         # Saving in file all processed data.
         dataset.save_processed_data(bearings_health_data, processed_data_path)
 
         return bearings_health_data
 
-    def states_assesment(self, bearings_health_data):
-        
-        threshold_values_mean = 0
-        for (i), (_, health_data) in enumerate(bearings_health_data.items()):
-            derivative_list = abs(np.diff(health_data['correlation_coefficients']))
-            max_derivative_index = np.argmax(derivative_list) 
-            health_data['threshold_value'] = health_data['correlation_coefficients'][max_derivative_index]
-            threshold_values_mean = (threshold_values_mean*i + health_data['threshold_value'])/(i+1)
+    def states_assesment(self, bearings_health_data, params):
         
         for _, health_data in bearings_health_data.items():
+
+            index_separator_candidate = -1
+
             for i, correlation_coefficient in enumerate(health_data['correlation_coefficients']):
-                if correlation_coefficient < 0.90:
-                    health_data['health_states']['normal'] = [0, i-1]
-                    health_data['health_states']['fast_degradation'] = [i, len(health_data['correlation_coefficients'])-1]
-                    health_data['health_states']['threshold_mean'] = threshold_values_mean
-                    break
-        
+
+                if correlation_coefficient < params['manual_threshold'] and index_separator_candidate == -1:
+                    index_separator_candidate = i # i is the position of the first 'fast_degradation' data.
+
+                if correlation_coefficient > params['manual_threshold'] and index_separator_candidate != -1:
+                    test_qty = int(len(health_data['correlation_coefficients'])*0.5//100) # Quantity of data to determine if it's back to normal state.
+                    test_index = np.arange(i, i + test_qty)
+                    test_data = np.array(health_data['correlation_coefficients'])[test_index]
+
+                    data_average = statistics.mean(test_data)
+
+                    # Checking if data is back to normal state.
+                    if data_average > params['manual_threshold']:
+                        # Reseting index separator.
+                        index_separator_candidate = -1
+            
+            health_data['health_states']['normal'] = [0, index_separator_candidate - 1]
+            health_data['health_states']['fast_degradation'] = [index_separator_candidate, len(health_data['correlation_coefficients']) - 1]
+                
         return bearings_health_data
 
     def rms(self, dataset, params):
@@ -362,7 +371,7 @@ class Functions:
                 # Calculating RMS.
                 bearing_rms.append(math.sqrt(np.mean(data**2)))
             # Smoothing data.
-            bearing_rms =  savgol_filter(bearing_rms, 19, 3)
+            bearing_rms =  savgol_filter(bearing_rms, params['smoothing_window_size'], 3)
             bearings_rms[str(current_bearing)] = bearing_rms
     
         dataset.save_processed_data(bearings_rms, processed_data_path)
@@ -385,31 +394,30 @@ class Functions:
         bearing_health_data['base_values'] = base_values
        
         # 1st - Take the mean of the base values.
-        #base_value = [statistics.mean(k) for k in zip(*base_values)]
-        #
-        #for svd_norm_sequence in svd_norm_sequences:
-        #    sum_xy = 0; sum_xx = 0; sum_yy = 0
-        #    for x, y in zip(base_value, svd_norm_sequence):
-        #        sum_xy += x*y
-        #        sum_xx += x*x
-        #        sum_yy += y*y
-        #    sqrt_xx_yy = math.sqrt(sum_xx*sum_yy)
-        #    correlation_coefficients.append(sum_xy / sqrt_xx_yy)
-
-        # 2nd - Take the mean of the correlation coefficients calculated for the set of base values.
+        base_value = [statistics.mean(k) for k in zip(*base_values)]
+        
         for svd_norm_sequence in svd_norm_sequences:
-            file_corr_coefs = []
-            for base_value in base_values:
-                sum_xy = 0; sum_xx = 0; sum_yy = 0
-                for x, y in zip(base_value, svd_norm_sequence):
-                    sum_xy += x*y
-                    sum_xx += x*x
-                    sum_yy += y*y
-                sqrt_xx_yy = math.sqrt(sum_xx*sum_yy)
-                # Calculating correlation coefficient.
-                file_corr_coefs.append(sum_xy / sqrt_xx_yy)
-            # Taking mean of the correlation coefficients highest values.
-            correlation_coefficients.append(statistics.mean(sorted(file_corr_coefs, reverse=True)[0:params['max_qty']]))
+            sum_xy = 0; sum_xx = 0; sum_yy = 0
+            for x, y in zip(base_value, svd_norm_sequence):
+                sum_xy += x*y
+                sum_xx += x*x
+                sum_yy += y*y
+            sqrt_xx_yy = math.sqrt(sum_xx*sum_yy)
+            correlation_coefficients.append(sum_xy / sqrt_xx_yy)
+        # 2nd - Take the mean of the correlation coefficients calculated for the set of base values.
+        #for svd_norm_sequence in svd_norm_sequences:
+        #    file_corr_coefs = []
+        #    for base_value in base_values:
+        #        sum_xy = 0; sum_xx = 0; sum_yy = 0
+        #        for x, y in zip(base_value, svd_norm_sequence):
+        #            sum_xy += x*y
+        #            sum_xx += x*x
+        #            sum_yy += y*y
+        #        sqrt_xx_yy = math.sqrt(sum_xx*sum_yy)
+        #        # Calculating correlation coefficient.
+        #        file_corr_coefs.append(sum_xy / sqrt_xx_yy)
+        #    # Taking mean of the correlation coefficients highest values.
+        #    correlation_coefficients.append(statistics.mean(sorted(file_corr_coefs, reverse=True)[0:params['max_qty']]))
 
         correlation_coefficients = savgol_filter(correlation_coefficients, params['smoothing_window_size'], 2)
 
@@ -467,7 +475,7 @@ class Functions:
             end = time.time()
             loop_time = (loop_time*i + (end-ini))/(i+1); remaining_time = loop_time * (files_size - i)
             
-            if i%4 == 0:
+            if i%10 == 0:
                 print('SVD - Processed ', i+1,' of ', files_size,' files.', int(remaining_time/60), 'minutes reamining.')
 
         # Normalizing to [-1, 1]

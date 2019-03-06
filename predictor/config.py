@@ -56,19 +56,20 @@ def generate():
             'vibration_signal': vibration_signal,
             'norm_interval': [-1, 1],
             'max_qty': 2,
-            'base_values_chunk_percentage': [0, 10],
-            'hankel_window_size': 10, #3
-            'smoothing_window_size': 7,
-            'debug': True
+            'base_values_chunk_percentage': [0, 2],
+            'hankel_window_size': 10,
+            'smoothing_window_size': 9,
+            'manual_threshold': 0.9
         }
 
         rms = {
-            'bearings': [0, 1, 6],
+            'bearings': [0],
+            'smoothing_window_size': 7,
             'vibration_signal': vibration_signal,
         }
 
         load_data_params = {
-            'bearings': [0],
+            'bearings': [0, 1, 2, 3, 4, 5, 6],
             'file_chunk_percentage': [0, 100]
         }
 
@@ -76,29 +77,25 @@ def generate():
             # ('bearings_fft', bearings_fft),
             ('hht_marginal_spectrum', hht_marginal_spectrum),
             ('health_assessment', health_assessment),
-            #('rms', rms)
+            ('rms', rms)
         ])
 
         """                    Models parameters                    """
 
         # nn.Conv2d(in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True) - Default by PyTorch
         cnn_layers = OrderedDict([
-            #in_channels, out_channels, kernel_size, stride.
-            ('conv1', [1, 64, 2, 1]),
-            #kernel_size.
-            ('pool', [2]),
-            #in_channels=, out_channels, kernel_size, stride.
-            ('conv2', [64, 128, 2, 1]),
-            ('linear1', [8064, 25]),
-            ('linear2', [25, 2])
+            ('conv1', [1, 64, 2, 1]),    #in_channels, out_channels, kernel_size, stride.
+            ('pool', [2]),               #kernel_size.
+            ('conv2', [64, 128, 2, 1]),  #in_channels, out_channels, kernel_size, stride.
+            ('linear', [8064, 25]),      # Why not [8064, 2]?
         ])
 
         lstm_layers = OrderedDict([])
 
         models_params = {
             'cnn': cnn_layers,
-            'cnn_epochs': 1000,
-            'cnn_batch_size': 50,
+            'cnn_epochs': 100,
+            'cnn_batch_size': 20,
             'lstm': lstm_layers 
         }
 
@@ -111,7 +108,7 @@ def generate():
         """                    Show results parameters                    """
 
         show_results_params = {
-            'results_to_show': ['hht_marginal_spectrum']
+            'results_to_show': ['health_assessment']
         }    
         
 

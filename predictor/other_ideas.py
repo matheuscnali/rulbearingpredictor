@@ -352,3 +352,32 @@ def hht_marginal_spectrum(self, dataset, params):
         dataset.save_processed_data(bearings_marginal_spectrum, processed_data_path)
 
         return bearings_marginal_spectrum
+
+
+""" Non sense max derivative to calculate threshold """
+threshold_values_mean = 0
+        for (i), (_, health_data) in enumerate(bearings_health_data.items()):
+            derivative_list = abs(np.diff(health_data['correlation_coefficients']))
+            max_derivative_index = np.argmax(derivative_list) 
+            health_data['threshold_value'] = health_data['correlation_coefficients'][max_derivative_index]
+            threshold_values_mean = (threshold_values_mean*i + health_data['threshold_value'])/(i+1)
+
+""" Calculating change point in correlation coefficinet by taking the average of a moving window """
+
+# Calculate the mean value in a moving window of size 'average_window_size'.
+average_window_index = i % average_window_size
+correlation_coefficient_average_list[average_window_index] = correlation_coefficient
+
+correlation_coefficient_window_mean = statistics.mean(correlation_coefficient_average_list)
+
+if correlation_coefficient_window_mean < params['manual_threshold']:
+    for j, window_correlation_coeffient in enumerate(correlation_coefficient_average_list):
+        if window_correlation_coeffient < params['manual_threshold']:
+            health_data['health_states']['normal'] = [0, i + (j - average_window_size) - 1]
+            health_data['health_states']['fast_degradation'] = [i-j, len(health_data['correlation_coefficients'])-1]
+            health_data['health_states']['threshold_mean'] = correlation_coefficient_window_mean
+            break
+    break
+
+""" Changing the weights of loss function to improve imbalanced classes (normal and fast degradation). """
+# loss_weight = torch.tensor([1.0, 2.0] + [1]*23)

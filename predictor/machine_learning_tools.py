@@ -1,6 +1,7 @@
 import torch
 import time
 import os
+import pickle
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
@@ -23,20 +24,21 @@ class NeuralNetworks():
         pass
 
     # Dataset class for Pytorch.
-    class PredictorDataset(TensorDataset):
-        def __init__(self, data, target, transform=None):
+    class ModelsDataset(TensorDataset):
+        def __init__(self, data, target, transform=None):   
             self.data = data
-            self.target = target
             self.transform = transform
-    
+            self.target = target
+
         def __getitem__(self, index):
             x = self.data[index]
             y = self.target[index]
             
             if self.transform:
                 x = self.transform(x)
-                
+        
             return x, y
+                
         
         def __len__(self):
             return len(self.data)
@@ -47,7 +49,8 @@ class NeuralNetworks():
             self.conv1 = nn.Conv2d(*params['conv1'])
             self.pool = nn.MaxPool2d(*params['pool'])
             self.conv2 = nn.Conv2d(*params['conv2'])
-            self.fc1 = nn.Linear(*params['linear'])
+            self.fc1 = nn.Linear(*params['linear1'])
+            self.fc2 = nn.Linear(*params['linear2'])
 
         def forward(self, x):
             in_size = x.size(0)
@@ -55,11 +58,11 @@ class NeuralNetworks():
             x = F.relu(self.pool(self.conv1(x)))
             x = F.relu(self.pool(self.conv2(x)))
             
-            # Flatten the tensor.
-            x = x.view(in_size, -1)
-            x = self.fc1(x) # Softmax is already computed in the loss function.
+            x = x.view(in_size, -1)              # Flatten the tensor.
+            deep_features = F.relu(self.fc1(x))  # Saving fully connected layer output as deep_features.
+            cnn_output = self.fc2(deep_features) # Softmax is already computed in the loss function.
 
-            return x
+            return [cnn_output, deep_features]
 
     def create_models(self, data_processed, params):
 
@@ -134,100 +137,204 @@ class NeuralNetworks():
 
     def predict(self, data_processed, models_params, predictor_params):
 
-        cnn_path = os.getcwd() + '/predictor/data/Processed_Data/cnn_model/cnn_model'
-        
         # Setting to use GPU processor if avaiable. Current set to False, GPU is too slow. Need to investigate.
-        cuda_available = torch.cuda.is_available(); cuda_available=False
-        device = self.device_setting(cuda_available)
-
-        # Getting processed data from all bearings.
-        health_states = self.bearings_data_join(data_processed, 'health_assessment', predictor_params)
-        hht_data = self.bearings_data_join(data_processed, 'hht_marginal_spectrum', predictor_params)
+        device = self.device_setting(predictor_params['cuda_available'])
 
         """ Convolutional Neural Network (CNN) """
-        # Classifing health_states and making health_states 1D.
-        health_states = self.health_states_classes(health_states)
-
-        # Making hht_data files 1D and getting spectrum.
-        hht_data = [file_data for bearing_data in hht_data for file_data in bearing_data]
-        hht_data = [x[1] for x in hht_data]
-
-        # Normalizing HHT data.
-        for i, data in enumerate(hht_data):
-            hht_data[i] = self.normalize_data(data)
-
-        # Shuffling and splitting data into traning data and validation data.
-        train_hht, eval_hht, train_health_states, eval_health_states = train_test_split(hht_data, health_states, test_size=0.3, random_state=42, shuffle=True)
+        # Train or load saved CNN model and pre-processed hht_data.
+        self.cnn_train(data_processed, models_params, predictor_params, device)
         
-        # Oversampling fast degradation class. Must be after data splitting. Otherwise, we could could end up with the same observation in both datasets.
-        # Selecting fast degradation data.         
-        sm = SMOTE(random_state=42, ratio=1.0)
-        train_hht, train_health_states = sm.fit_sample(train_hht, train_health_states)
+        # Extract deep features.
+        self.cnn_deep_features(data_processed, models_params, predictor_params, device)
 
-        # Test also undersampling!
-
-        # Shuffling data again.
-        random_index = np.random.permutation(len(train_hht))
-        train_hht = np.array(train_hht)[random_index]
-        train_health_states = np.array(train_health_states)[random_index]
+    def cnn_deep_features(self, data_processed, models_params, predictor_params, device):
+    
+        deep_features_path = os.getcwd() + '/predictor/data/Processed_Data/cnn_model/deep_features'
         
-        # Reshaping HHT data for CNN. Not mandatory.
-        # shape = [batch_size, color_channels, height, width]. In this case we set a number of batch files to the number of files which we will process per epoch. Height and width are user defined. 'color_channels' would be the depth which in our case is just 1.
-        train_hht = [np.reshape(x, [1, 32, 40]) for x in train_hht]
-        eval_hht = [np.reshape(x, [1, 32, 40]) for x in eval_hht]
-        
-        # Creating tensors.
-        if cuda_available: 
-            train_hht, eval_hht = torch.cuda.FloatTensor(train_hht), torch.cuda.FloatTensor(eval_hht)
-            train_health_states, eval_health_states = torch.cuda.FloatTensor(train_health_states), torch.cuda.FloatTensor(eval_health_states)
-        else:
-            train_hht, eval_hht = torch.FloatTensor(train_hht), torch.FloatTensor(eval_hht)
-            train_health_states, eval_health_states = torch.LongTensor(train_health_states), torch.LongTensor(eval_health_states)
+        if(os.path.isfile(deep_features_path)):
+            with open(deep_features_path, 'rb') as file:
+                return pickle.load(file)
 
-        # Creating dataset.
-        train_dataset = self.PredictorDataset(train_hht, train_health_states)
-        eval_dataset = self.PredictorDataset(eval_hht, eval_health_states)
-        
-        # Creating loaders.
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=models_params['cnn_batch_size'],
-            shuffle=True,
-            num_workers=3,
-        )
+        cnn_model = self.data_driven_models['cnn']
+        bearings_deep_features = []
 
-        eval_loader = DataLoader(
-            eval_dataset,
-            batch_size=models_params['cnn_batch_size'],
-            shuffle=True,
-            num_workers=3,
-        )
+        bearings_deep_feature_loader = self.cnn_data(data_processed, models_params, predictor_params, 'deep_feature_extraction')
+        
+        for bearing_deep_feature_loader in bearings_deep_feature_loader:
+            bearing_deep_features = []
+            import ipdb; ipdb.set_trace()
+            for i, (eval_feature, _) in enumerate(bearing_deep_feature_loader):
+                # Passing data to device.
+                eval_feature = eval_feature.to(device)
+            
+                # Forwarding data and getting deep features. Appending numpy arrays because tensors uses more memory.
+                bearing_deep_features.append([x.detach().numpy() for x in cnn_model(eval_feature)[1]])
+                
+                if i % 25 == 0:
+                    print(model_params['cnn_batch_size']*(i+1), 'deep feature extracted.')
+
+            bearings_deep_features.append(bearing_deep_features)
+
+        # Saving pre-processed hht_data.
+        with open(deep_features_path, 'wb') as file:
+            pickle.dump(bearings_deep_features, file)
+        
+        data_processed['deep_features'] = bearings_deep_features
+
+    def cnn_data(self, data_processed, models_params, predictor_params, adjust_data_for):
+
+        deep_features_hht_data_path = os.getcwd() + '/predictor/data/Processed_Data/cnn_model/deep_feature_hht_data'
+
+        if adjust_data_for == 'trainning':
+            
+            # Getting processed data from all bearings.
+            health_states = self.bearings_data_join(data_processed, 'health_assessment', predictor_params)
+            hht_data = self.bearings_data_join(data_processed, 'hht_marginal_spectrum', predictor_params)
+            
+            # Classifing health_states and making health_states 1D.
+            health_states = self.health_states_classes(health_states)
+            
+            # Saving hht_data shape to reshape for deep features.
+            hht_data_shapes = [len(x) for x in hht_data]
+            index_slices = []; index_slice = 0
+            for shape in enumerate(hht_data_shapes):
+                index_slice += shape[1]
+                index_slices.append(index_slice) 
+
+            # Making hht_data files 1D and getting spectrum.
+            hht_data = [file_data[1] for bearing_data in hht_data for file_data in bearing_data]
+
+            # Normalizing HHT data.
+            for i, data in enumerate(hht_data):
+                hht_data[i] = self.normalize_data(data)
+
+            # Saving hht_data at this point for deep features.
+            with open(deep_features_hht_data_path, 'wb') as file:
+                pickle.dump(np.split(hht_data, index_slices[:-1]), file)
+
+            # Splitting data into traning data and validation data.
+            train_hht, eval_hht, train_health_states, eval_health_states = train_test_split(hht_data, health_states, test_size=0.3, random_state=14, shuffle=True)
+
+            # Oversampling fast degradation class. Must be after data splitting. Otherwise, we could could end up with the same observation in both datasets.
+            # Selecting fast degradation data.         
+            sm = SMOTE(random_state=42, ratio=1.0)
+            train_hht, train_health_states = sm.fit_sample(train_hht, train_health_states)
+            
+            # Shuffling data.
+            random_index = np.random.permutation(len(train_hht))
+            train_hht = np.array(train_hht)[random_index]
+            train_health_states = np.array(train_health_states)[random_index]
+
+            train_hht = [np.reshape(x, [1, 32, 40]) for x in train_hht]
+            eval_hht = [np.reshape(x, [1, 32, 40]) for x in eval_hht]
+
+            # Creating tensors.
+            if predictor_params['cuda_available']: 
+                train_hht, eval_hht = torch.cuda.FloatTensor(train_hht), torch.cuda.FloatTensor(eval_hht)
+                train_health_states, eval_health_states = torch.cuda.LongTensor(train_health_states), torch.cuda.LongTensor(eval_health_states)
+            else:
+                train_hht, eval_hht = torch.FloatTensor(train_hht), torch.FloatTensor(eval_hht)
+                train_health_states, eval_health_states = torch.LongTensor(train_health_states), torch.LongTensor(eval_health_states)
+
+            # Creating dataset.
+            train_dataset = self.ModelsDataset(train_hht, train_health_states)
+            eval_dataset = self.ModelsDataset(eval_hht, eval_health_states)
+            
+            # Creating loaders.
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=models_params['cnn_batch_size'],
+                shuffle=True,
+                num_workers=3,
+            )
+
+            eval_loader = DataLoader(
+                eval_dataset,
+                batch_size=models_params['cnn_batch_size'],
+                shuffle=True,
+                num_workers=3,
+            )
+
+            return train_loader, eval_loader
+
+        elif adjust_data_for == 'deep_feature_extraction':
+           
+           # Loading saved deep_features_hht_data.
+            if(os.path.isfile(deep_features_hht_data_path)):
+                with open(deep_features_hht_data_path, 'rb') as file:
+                    bearings_hht_data = pickle.load(file)
+
+            # Reshaping bearings_hht_data.
+            bearings_hht_data_reshaped = []
+            for bearing_hht_data in bearings_hht_data:
+                bearings_hht_data_reshaped.append([np.reshape(x, [1, 32, 40]) for x in bearing_hht_data])
+
+            # Creating tensor for hht_data.
+            bearings_hht_tensor = []
+            for bearing_hht_data in bearings_hht_data_reshaped:
+                if predictor_params['cuda_available']: 
+                    bearings_hht_tensor.append(torch.cuda.FloatTensor(bearing_hht_data))
+                else:
+                    bearings_hht_tensor.append(torch.FloatTensor(bearing_hht_data))
+            
+            bearings_deep_feature_dataset = []
+            for bearing_hht_tensor in bearings_hht_tensor:
+                N = len(bearing_hht_tensor)
+                bearings_deep_feature_dataset.append(self.ModelsDataset(bearing_hht_tensor, [-1]*N)) # No need data for output. This dataset is just for forward process.
+
+            bearings_deep_feature_loader = []
+            for bearing_deep_feature_dataset in bearings_deep_feature_dataset:
+                bearings_deep_feature_loader.append(
+                DataLoader(
+                    bearing_deep_feature_dataset,
+                    batch_size=models_params['cnn_batch_size'],
+                    shuffle=True,
+                    num_workers=3,
+                ))
+
+            return bearings_deep_feature_loader
+
+    def cnn_train(self, data_processed, models_params, predictor_params, device): 
+        
+        cnn_path = os.getcwd() + '/predictor/data/Processed_Data/cnn_model/cnn_model'
+
+        # Loading saved model and hht_data pre-processed.
+        if(os.path.isfile(cnn_path)):
+            self.data_driven_models['cnn'].load_state_dict(torch.load(cnn_path))
+            return
+            
+        # Getting data loaders.
+        train_loader, eval_loader = self.cnn_data(data_processed, models_params, predictor_params, 'trainning')
 
         # Passing model to device and setting criterion.
-        model = self.data_driven_models['cnn'].to(device)
+        cnn_model = self.data_driven_models['cnn'].to(device)
         criterion = nn.CrossEntropyLoss()
 
         for epoch in range(models_params['cnn_epochs']):
-            start = time.time()
+            
+            if epoch % 1 == 0:
+                start = time.time()
+            
             # Setting optimizer and adjusting learning rate with epochs.
-            optimizer = optim.SGD(model.parameters(), lr=self.adjust_learning_rate(epoch))
+            optimizer = optim.SGD(cnn_model.parameters(), lr=self.adjust_learning_rate(epoch))
             
             # Setting model to trainning mode.
-            model.train()
+            cnn_model.train()
             running_loss = 0.0
-            for i, (hht_data, health_states) in enumerate(train_loader):
+            
+            for i, (train_feature, train_output) in enumerate(train_loader):
                 
                 # Passing data to device.
-                hht_data, health_states = hht_data.to(device), health_states.to(device)
+                train_feature, train_output = train_feature.to(device), train_output.to(device)
                 
                 # Setting the parameter gradients to zero.
                 optimizer.zero_grad()
 
                 # Forwarding data and getting prediction.
-                health_states_ = model(hht_data)
+                train_output_ = cnn_model(train_feature)[0]
                 
                 # Computing loss and ajusting CNN weights.
-                loss = criterion(health_states_, health_states)
+                loss = criterion(train_output_, train_output)
                 loss.backward(loss)
                 
                 # Ajusting the weights of CNN.
@@ -239,18 +346,20 @@ class NeuralNetworks():
             if epoch % 1 == 0:
                 print('Epoch', epoch)
                 print('Loss Train %.4f' % running_loss)
-                #print('Kappa', cohen_kappa_score())
+                
+                # Try to calculate kappa score here.
 
-            model.eval()
+            cnn_model.eval()
             running_loss = 0.0
-            for i, (hht_data, health_states) in enumerate(eval_loader):
+            
+            for i, (eval_feature, eval_output) in enumerate(eval_loader):
 
                 # Passing data to device.
-                hht_data, health_states = hht_data.to(device), health_states.to(device)
+                eval_feature, eval_output = eval_feature.to(device), eval_output.to(device)
 
                 # Forwarding data and getting prediction.
-                health_states_ = model(hht_data)
-                loss = criterion(health_states_, health_states)
+                eval_output_ = cnn_model(eval_feature)[0]
+                loss = criterion(eval_output_, eval_output)
 
                 # Averaging running_loss.
                 running_loss = (running_loss*i + loss.item())/(i+1)
@@ -258,21 +367,17 @@ class NeuralNetworks():
             if epoch % 1 == 0:
                 end = time.time()
                 print('Loss Test %.4f' % running_loss)
-                print('Time %.2f' % (end - start), '\n')
+                print('Time %.2f' % (end - start), 's\n')
         
         # Saving model.
-        torch.save(model.state_dict(), cnn_path)
+        torch.save(cnn_model.state_dict(), cnn_path)
 
     def adjust_learning_rate(self, epoch):
         lr = 0.001
 
-        if epoch > 180:
-            lr = lr / 1000000
-        elif epoch > 140:
-            lr = lr / 100000
-        elif epoch > 110:
+        if epoch > 80:
             lr = lr / 10000
-        elif epoch > 80:
+        elif epoch > 60:
             lr = lr / 1000
         elif epoch > 50:
             lr = lr / 100
@@ -280,9 +385,3 @@ class NeuralNetworks():
             lr = lr / 10
         
         return lr
-
-
-
-
-
-

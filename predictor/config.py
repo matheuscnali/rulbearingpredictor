@@ -7,6 +7,7 @@ neural network. Advances in Mechanical Engineering, 10(12), p.1687814018817184.
 
 from collections import OrderedDict
 import torch.nn as nn
+import torch
 
 
 class Method:
@@ -28,7 +29,7 @@ def generate():
         'dataset_name': 'PHM',
         'method_list': method_list,
         'processing_unit': 'CPU',
-        'load_bearings_data': True
+        'load_bearings_data': False
     }
 
     def method1():
@@ -40,19 +41,19 @@ def generate():
         vibration_signal = 'vib_horizontal'
         
         hht_marginal_spectrum = {
-            'bearings': [0], # Bearings to be processed by this function. See PHM_dataset in data_tools.py to get bearings name.
+            'bearings': [0, 1, 2, 3, 4, 5, 6], # Bearings to be processed by this function. See PHM_dataset in data_tools.py to get bearings name.
             'sampling_frequency': 25600, # 25.6 KHz
             'vibration_signal': vibration_signal,
         }
 
         bearings_fft = {
-            'bearings': [0],
+            'bearings': [0, 1, 2, 3, 4, 5, 6],
             'sampling_frequency': 25600,
             'vibration_signal': vibration_signal
         }
 
         health_assessment = {
-            'bearings': [0],
+            'bearings': [0, 1, 2, 3, 4, 5, 6],
             'vibration_signal': vibration_signal,
             'norm_interval': [-1, 1],
             'max_qty': 2,
@@ -63,7 +64,7 @@ def generate():
         }
 
         rms = {
-            'bearings': [0],
+            'bearings': [0, 1, 2, 3, 4, 5, 6],
             'smoothing_window_size': 7,
             'vibration_signal': vibration_signal,
         }
@@ -87,14 +88,15 @@ def generate():
             ('conv1', [1, 64, 2, 1]),    #in_channels, out_channels, kernel_size, stride.
             ('pool', [2]),               #kernel_size.
             ('conv2', [64, 128, 2, 1]),  #in_channels, out_channels, kernel_size, stride.
-            ('linear', [8064, 25]),      # Why not [8064, 2]?
+            ('linear1', [8064, 25]),
+            ('linear2', [25, 2])      
         ])
 
         lstm_layers = OrderedDict([])
 
         models_params = {
             'cnn': cnn_layers,
-            'cnn_epochs': 100,
+            'cnn_epochs': 1,
             'cnn_batch_size': 20,
             'lstm': lstm_layers 
         }
@@ -102,7 +104,8 @@ def generate():
         """                     Predictor parameters                        """
 
         predictor_params = {
-            'bearings': [0]
+            'bearings': [0, 1, 2, 3, 4, 5, 6],
+            'cuda_available': False #torch.cuda.is_available()
         }
 
         """                    Show results parameters                    """

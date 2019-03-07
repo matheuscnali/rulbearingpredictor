@@ -12,7 +12,6 @@ class Predictor:
     show_results = show_results.Functions()
     data_processed = {}
 
-
     def __init__(self):
         pass
 

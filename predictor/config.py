@@ -29,7 +29,6 @@ def generate():
         'dataset_name': 'PHM',
         'method_list': method_list,
         'processing_unit': 'CPU',
-        'load_bearings_data': False
     }
 
     def method1():
@@ -41,13 +40,14 @@ def generate():
         vibration_signal = 'vib_horizontal'
         
         hht_marginal_spectrum = {
-            'bearings': [0, 1, 2, 3, 4, 5, 6], # Bearings to be processed by this function. See PHM_dataset in data_tools.py to get bearings name.
+            'bearings': [0], # Bearings to be processed by this function. See PHM_dataset in data_tools.py to get bearings name.
             'sampling_frequency': 25600, # 25.6 KHz
             'vibration_signal': vibration_signal,
+            'imfs_qty': -4 # Using MAX number of imfs - 1.
         }
 
         bearings_fft = {
-            'bearings': [0, 1, 2, 3, 4, 5, 6],
+            'bearings': [0],
             'sampling_frequency': 25600,
             'vibration_signal': vibration_signal
         }
@@ -60,7 +60,8 @@ def generate():
             'base_values_chunk_percentage': [0, 2],
             'hankel_window_size': 10,
             'smoothing_window_size': 9,
-            'manual_threshold': 0.9
+            'manual_threshold': 0.9,
+            'correlation_coefficient_method': 'base_values_mean' # or 'correlation_coefficient_values_mean'
         }
 
         rms = {
@@ -70,6 +71,7 @@ def generate():
         }
 
         load_data_params = {
+            'load_data': True,
             'bearings': [0, 1, 2, 3, 4, 5, 6],
             'file_chunk_percentage': [0, 100]
         }
@@ -83,20 +85,27 @@ def generate():
 
         """                    Models parameters                    """
 
+        deep_features_qty = 25
+
         # nn.Conv2d(in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True) - Default by PyTorch
         cnn_layers = OrderedDict([
             ('conv1', [1, 64, 2, 1]),    #in_channels, out_channels, kernel_size, stride.
             ('pool', [2]),               #kernel_size.
             ('conv2', [64, 128, 2, 1]),  #in_channels, out_channels, kernel_size, stride.
-            ('linear1', [8064, 25]),
-            ('linear2', [25, 2])      
+            ('linear1', [3968, deep_features_qty]),
+            ('linear2', [deep_features_qty, 2]),    
         ])
 
-        lstm_layers = OrderedDict([])
+        lstm_layers = OrderedDict([
+            ('input', [25]),
+            ('hidden', [1]),
+            ('batch_first', True),
+            ()
+        ])
 
         models_params = {
             'cnn': cnn_layers,
-            'cnn_epochs': 1,
+            'cnn_epochs': 30,
             'cnn_batch_size': 20,
             'lstm': lstm_layers 
         }
@@ -104,14 +113,16 @@ def generate():
         """                     Predictor parameters                        """
 
         predictor_params = {
-            'bearings': [0, 1, 2, 3, 4, 5, 6],
+            'bearings': [0],
+            'hht_cnn_shape': [1, 10, 128],
+            'return_cnn_model': False, # If you want to recover the model to train more, set False.
             'cuda_available': False #torch.cuda.is_available()
         }
 
         """                    Show results parameters                    """
 
         show_results_params = {
-            'results_to_show': ['health_assessment']
+            'results_to_show': ['hht_marginal_spectrum', 'health_assessment']
         }    
         
 

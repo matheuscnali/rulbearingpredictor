@@ -1,0 +1,7 @@
+Improvements
+
+CNN
+1 - Use 1D data as input.
+2 - Use 2D data with time frequency.
+3 - Use 2D data where each row is a marginal spectrum recording and each column is the frequency.
+4 - Use 2D data where the first row is the marginal spectrum and the second is the temperature. 

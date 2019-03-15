@@ -381,3 +381,77 @@ if correlation_coefficient_window_mean < params['manual_threshold']:
 
 """ Changing the weights of loss function to improve imbalanced classes (normal and fast degradation). """
 # loss_weight = torch.tensor([1.0, 2.0] + [1]*23)
+
+""" Data normalization """
+
+    def normalize_data(self, data):
+        data = np.array(data)
+        data_shape = data.shape
+        data_row = np.reshape(data, [1, data.size])[0]
+
+        data_max = np.amax(data_row)
+        data_min = np.amin(data_row)
+        
+        DIFF = data_max - data_min;  a, b = -1, 1;  norm_diff = b - a
+            
+        data_normalized = []
+        for value in data_row:
+            data_normalized.append(( norm_diff*(value - data_min) / DIFF ) + a)
+        
+        data_normalized = np.array(data_normalized)
+        data_normalized = np.reshape(data_normalized, data_shape)
+
+        return data_normalized.tolist()
+
+        """ Wrong HHT """
+                # Calculating Hilbert spectrum of each decomposition.
+            #fs = params['sampling_frequency']
+            #imfs_mag_spec_files = []
+            #
+            #for imfs_ht_file in imfs_ht_files:
+            #    imfs_mag_spec_file = []
+            #    N = len(imfs_ht_file[0])
+            #    freqs = np.arange(N)*(fs/N)
+            #    freqs = freqs[0:int(N//2)]
+            #    for imf_ht_file in imfs_ht_file:
+            #        fft_vals = fft(imf_ht_file)
+            #        fft_theo = 2.0*np.abs(fft_vals/N)
+            #        fft_theo = fft_theo[0:int(N//2)]
+            #        imfs_mag_spec_file.append([freqs, fft_theo])
+            #    imfs_mag_spec_files.append(imfs_mag_spec_file)
+            ## Calculating Hilbert marginal spectrum
+            #for imfs_mag_spec_file in imfs_mag_spec_files:
+            #    bearing_marginal_spectrum.append([imfs_mag_spec_file[0][0], sum([x[1] for x in imfs_mag_spec_file])])
+
+             files_instantaneous_frequency = [np.int_(x) for x in files_instantaneous_frequency]
+            
+                        for file_instantaneous_frequency, file_amplitude_envelope in zip(files_instantaneous_frequency, files_amplitude_envelope):
+                file_imfs_marginal_spectrum = []
+                for imf_instantaneous_frequency, imf_amplitude_envelope in zip(file_instantaneous_frequency, file_amplitude_envelope):
+                        dups = collections.defaultdict(list)
+                        
+                        frequencies = []; spectrum = []
+                        for i, e in enumerate(imf_instantaneous_frequency):
+                            dups[e].append(i)
+                        for freq, index in sorted(dups.items()):
+                            time_integral = sum([imf_amplitude_envelope[x] for x in index])
+                            frequencies.append(freq); spectrum.append(time_integral)
+                        file_imfs_marginal_spectrum.append([frequencies, spectrum])
+                
+                imfs_frequencies = []; imfs_spectrum = []
+                for i, (imf_frequencies, imf_spectrum) in enumerate(file_imfs_marginal_spectrum):
+                    if i < 5: #Setting the number of IMFs to calculate.
+                        imfs_frequencies.extend(imf_frequencies)
+                        imfs_spectrum.extend(imf_spectrum)
+            
+                dups = collections.defaultdict(list)
+                    
+                frequencies = []; spectrum = []
+                for i, e in enumerate(imfs_frequencies):
+                    dups[e].append(i)
+                for freq, index in sorted(dups.items()):
+                    time_integral = sum([imfs_spectrum[x] for x in index])
+                    frequencies.append(freq); spectrum.append(time_integral)
+                bearing_marginal_spectrum.append([frequencies, spectrum])
+
+            bearings_marginal_spectrum[str(current_bearing)] = bearing_marginal_spectrum

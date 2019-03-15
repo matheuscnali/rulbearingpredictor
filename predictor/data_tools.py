@@ -12,6 +12,7 @@ import collections
 
 from matplotlib.pyplot import magnitude_spectrum
 from pyhht.emd import EMD
+import pyhht.utils
 from scipy.optimize import curve_fit
 from scipy.linalg import svdvals
 from scipy.linalg import hankel
@@ -180,7 +181,7 @@ class Functions:
                 return bearings_marginal_spectrum
 
         else:
-            bearings_marginal_spectrum = OrderedDict()
+            bearings_marginal_spectrum = {}
 
         for current_bearing in bearings_not_processed:
             imfs_files = []
@@ -192,6 +193,10 @@ class Functions:
                 data = bearing_file[params['vibration_signal']].values
                 decomposer = EMD(data)
                 imfs_files.append(decomposer.decompose())
+            
+            # Getting the frequency bins.
+            N = len(data); fs = params['sampling_frequency']; freq_bins_step = fs/N
+            freq_bins = np.fft.fftfreq(N)[0:N//2]*fs # Timestep = 1. 
 
             # Calculating Hilbert transform for each IMF.
             imfs_ht_files = []
@@ -199,64 +204,40 @@ class Functions:
             for imfs_file in imfs_files:
                 imfs_ht_files.append(hilbert(imfs_file))
 
-            #fs = params['sampling_frequency']
-            #files_instantaneous_phase = [np.unwrap(np.angle(imfs_ht_file)) for imfs_ht_file in imfs_ht_files]
-            #files_instantaneous_frequency = np.multiply(np.divide([np.diff(x) for x in files_instantaneous_phase], 2.0*np.pi), fs)
-            #files_instantaneous_frequency = [np.int_(x) for x in files_instantaneous_frequency]
-            #files_amplitude_envelope = np.abs(imfs_ht_files)
-            #
-            #for file_instantaneous_frequency, file_amplitude_envelope in zip(files_instantaneous_frequency, files_amplitude_envelope):
-            #    file_imfs_marginal_spectrum = []
-            #    for imf_instantaneous_frequency, imf_amplitude_envelope in zip(file_instantaneous_frequency, file_amplitude_envelope):
-            #            dups = collections.defaultdict(list)
-            #            
-            #            frequencies = []; spectrum = []
-            #            for i, e in enumerate(imf_instantaneous_frequency):
-            #                dups[e].append(i)
-            #            for freq, index in sorted(dups.items()):
-            #                time_integral = sum([imf_amplitude_envelope[x] for x in index])
-            #                frequencies.append(freq); spectrum.append(time_integral)
-            #            file_imfs_marginal_spectrum.append([frequencies, spectrum])
-            #    
-            #    imfs_frequencies = []; imfs_spectrum = []
-            #    for i, (imf_frequencies, imf_spectrum) in enumerate(file_imfs_marginal_spectrum):
-            #        if i < 5: #Setting the number of IMFs to calculate.
-            #            imfs_frequencies.extend(imf_frequencies)
-            #            imfs_spectrum.extend(imf_spectrum)
-            #
-            #    dups = collections.defaultdict(list)
-            #        
-            #    frequencies = []; spectrum = []
-            #    for i, e in enumerate(imfs_frequencies):
-            #        dups[e].append(i)
-            #    for freq, index in sorted(dups.items()):
-            #        time_integral = sum([imfs_spectrum[x] for x in index])
-            #        frequencies.append(freq); spectrum.append(time_integral)
-            #    bearing_marginal_spectrum.append([frequencies, spectrum])
-
-
-            # Calculating Hilbert spectrum of each decomposition.
-            fs = params['sampling_frequency']
-            imfs_mag_spec_files = []
-            
+            # Calculating instantaneous frequency of each data.
+            imfs_freqs_files = []
             for imfs_ht_file in imfs_ht_files:
-                imfs_mag_spec_file = []
-                N = len(imfs_ht_file[0])
-                freqs = np.arange(N)*(fs/N)
-                freqs = freqs[0:int(N//2)]
+                imfs_freqs_file = []
                 for imf_ht_file in imfs_ht_file:
-                    fft_vals = fft(imf_ht_file)
-                    fft_theo = 2.0*np.abs(fft_vals/N)
-                    fft_theo = fft_theo[0:int(N//2)]
-                    imfs_mag_spec_file.append([freqs, fft_theo])
-                imfs_mag_spec_files.append(imfs_mag_spec_file)
+                    imfs_freqs_file.append(pyhht.utils.inst_freq(imf_ht_file)[0] * fs) # [0] to select the frequencies. * fs because the inst_freq return normalized freqs.
+                imfs_freqs_files.append(imfs_freqs_file)
+
+            # Calculating absolute value.
+            N = len(imfs_ht_file[0])
+            imfs_envelope_files = np.abs(imfs_ht_files) / N
+
+            # Putting frequencies into the frequency bins and computing Hilbert Marginal Spectrum.
+            imfs_envelope_files_bins = [] 
+            for imfs_freqs_file, imfs_envelope_file in zip(imfs_freqs_files, imfs_envelope_files):
+                imfs_envelope_file_bins = []
+                for imf_freqs_file, imf_envelope_file in zip(imfs_freqs_file, imfs_envelope_file):
+                    imfs_envelope_file_ = np.zeros(N//2) 
+                    
+                    bin_index = [int(freq // freq_bins_step) for freq in imf_freqs_file]
+                    
+                    for index, abs_val in zip(bin_index, imf_envelope_file):
+                        imfs_envelope_file_[index] += abs_val
+                
+                    imfs_envelope_file_bins.append(imfs_envelope_file_)
+
+                imfs_envelope_files_bins.append(imfs_envelope_file_bins)
+
+            # Summing Hilbert Marginal Spectrum of [0:params['imfs_qty]] imfs.
+            for imfs_envelope_file_bins in imfs_envelope_files_bins:
+                 bearing_marginal_spectrum.append([sum(x) for x in zip(*imfs_envelope_file_bins[0:params['imfs_qty']])])
+
+            bearings_marginal_spectrum[str(current_bearing)] = [freq_bins, bearing_marginal_spectrum]
             
-            # Calculating Hilbert marginal spectrum
-            for imfs_mag_spec_file in imfs_mag_spec_files:
-                bearing_marginal_spectrum.append([imfs_mag_spec_file[0][0], sum([x[1] for x in imfs_mag_spec_file])])
-
-            bearings_marginal_spectrum[str(current_bearing)] = bearing_marginal_spectrum
-
         dataset.save_processed_data(bearings_marginal_spectrum, processed_data_path)
 
         return bearings_marginal_spectrum
@@ -394,31 +375,35 @@ class Functions:
         bearing_health_data['base_values'] = base_values
        
         # 1st - Take the mean of the base values.
-        base_value = [statistics.mean(k) for k in zip(*base_values)]
-        
-        for svd_norm_sequence in svd_norm_sequences:
-            sum_xy = 0; sum_xx = 0; sum_yy = 0
-            for x, y in zip(base_value, svd_norm_sequence):
-                sum_xy += x*y
-                sum_xx += x*x
-                sum_yy += y*y
-            sqrt_xx_yy = math.sqrt(sum_xx*sum_yy)
-            correlation_coefficients.append(sum_xy / sqrt_xx_yy)
-        # 2nd - Take the mean of the correlation coefficients calculated for the set of base values.
-        #for svd_norm_sequence in svd_norm_sequences:
-        #    file_corr_coefs = []
-        #    for base_value in base_values:
-        #        sum_xy = 0; sum_xx = 0; sum_yy = 0
-        #        for x, y in zip(base_value, svd_norm_sequence):
-        #            sum_xy += x*y
-        #            sum_xx += x*x
-        #            sum_yy += y*y
-        #        sqrt_xx_yy = math.sqrt(sum_xx*sum_yy)
-        #        # Calculating correlation coefficient.
-        #        file_corr_coefs.append(sum_xy / sqrt_xx_yy)
-        #    # Taking mean of the correlation coefficients highest values.
-        #    correlation_coefficients.append(statistics.mean(sorted(file_corr_coefs, reverse=True)[0:params['max_qty']]))
+        if params['correlation_coefficient_method'] == 'base_values_mean':
+            base_value = [statistics.mean(k) for k in zip(*base_values)]
+            
+            for svd_norm_sequence in svd_norm_sequences:
+                sum_xy = 0; sum_xx = 0; sum_yy = 0
+                for x, y in zip(base_value, svd_norm_sequence):
+                    sum_xy += x*y
+                    sum_xx += x*x
+                    sum_yy += y*y
+                sqrt_xx_yy = math.sqrt(sum_xx*sum_yy)
+                correlation_coefficients.append(sum_xy / sqrt_xx_yy)
 
+        # 2nd - Take the mean of the correlation coefficients calculated for the set of base values.
+        elif params['correlation_coefficient_method'] == 'correlation_coefficient_values_mean':
+            for svd_norm_sequence in svd_norm_sequences:
+                file_corr_coefs = []
+                for base_value in base_values:
+                    sum_xy = 0; sum_xx = 0; sum_yy = 0
+                    for x, y in zip(base_value, svd_norm_sequence):
+                        sum_xy += x*y
+                        sum_xx += x*x
+                        sum_yy += y*y
+                    sqrt_xx_yy = math.sqrt(sum_xx*sum_yy)
+                    # Calculating correlation coefficient.
+                    file_corr_coefs.append(sum_xy / sqrt_xx_yy)
+                # Taking mean of the correlation coefficients highest values.
+                correlation_coefficients.append(statistics.mean(sorted(file_corr_coefs, reverse=True)[0:params['max_qty']]))
+
+        # Smoothing correlation coefficients.
         correlation_coefficients = savgol_filter(correlation_coefficients, params['smoothing_window_size'], 2)
 
         # Normalizing correlation coefficients to [-1, 1].

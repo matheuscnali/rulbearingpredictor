@@ -36,12 +36,12 @@ def main():
     predictor = Predictor()
 
     for method in CONF['method_list']:
-        if CONF['load_bearings_data']:
+        if method.load_data_params['load_data']:
             predictor.dataset.load_bearing_data(predictor.dataset, method.load_data_params)
         
         predictor.data_processing(method.data_processing_params)
-        predictor.predict(method.models_params, method.predictor_params)
-        #predictor.results(method.show_results_params)
+        #predictor.predict(method.models_params, method.predictor_params)
+        predictor.results(method.show_results_params)
 
 if __name__ == '__main__':
     main()

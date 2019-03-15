@@ -37,27 +37,25 @@ class Functions:
             for bearing_name, bearing_marginal_spectrum in data.items():
                 
                 N = len(bearing_marginal_spectrum)
-                ini = 10; middle = int(N//2-5); end = int(N-15)
-                freqs1, spectrum1 = bearing_marginal_spectrum[ini]
-                freqs2, spectrum2 = bearing_marginal_spectrum[middle]
-                freqs3, spectrum3 = bearing_marginal_spectrum[end]
+                ini = 1; middle = int(1900); end = int(2765)
+                spectrum1 = bearing_marginal_spectrum[1][ini]
+                spectrum2 = bearing_marginal_spectrum[1][middle]
+                spectrum3 = bearing_marginal_spectrum[1][end]
+                freqs = bearing_marginal_spectrum[0]
 
-                fig, ax = plt.subplots(3, 1, sharex=True, sharey=True)
-                fig.dpi = 180; fig.figsize = (11,11)
-                ax[0].plot(freqs1, spectrum1)
-                ax[0].set_title('Bearing ' + bearing_name + ', beggining.')
-                ax[0].set_xlim(6000, 12000, 'c')
-                ax[0].set_ylim(0, 0.5)
+                fig, ax = plt.subplots(3, 1, sharex=True, sharey=False)
+                fig.dpi = 290; fig.figsize = (11,11)
+                ax[0].plot(freqs, spectrum1, color='#3b4ba7')
+                ax[0].set_xlim(6000, 12500, 'c')
+                ax[0].set_ylim(0, 0.006)
+                
+                ax[1].plot(freqs, spectrum2, color='#3b4ba7')
+                ax[1].set_xlim(6000, 12500, 'c')
+                ax[1].set_ylim(0, 0.006)
 
-                ax[1].plot(freqs2, spectrum2)
-                ax[1].set_title('Bearing ' + bearing_name + ', middle.')
-                ax[1].set_xlim(6000, 12000, 'c')
-                ax[1].set_ylim(0, 0.5)
-
-                ax[2].plot(freqs3, spectrum3)
-                ax[2].set_title('Bearing ' + bearing_name + ', end.')
-                ax[2].set_xlim(6000, 12000, 'c')
-                ax[2].set_ylim(0, 0.5)
+                ax[2].plot(freqs, spectrum3, color='#3b4ba7')
+                ax[2].set_xlim(6000, 12500, 'c')
+                ax[2].set_ylim(0, 0.008)
                 
                 plt.show()
             
@@ -68,10 +66,11 @@ class Functions:
 
             for (rms_key, rms), (_, health_assessment) in zip(rms_data.items(), health_assesment_data.items()):
                 fig = plt.figure()
-                fig.dpi = 200; fig.figsize = (11,11)
+                fig.dpi = 180; fig.figsize = (11,11)
+                plt.rcParams.update({'font.size': 17})
                 plt.title('Correlation Coefficient - Bearing '+ str(int(rms_key)+1))
-                plt.plot(health_assessment['correlation_coefficients'], 'C2')
-                plt.plot(rms, 'C0')
+                plt.plot(health_assessment['correlation_coefficients'], color = '#5fc232', marker='s')
+                plt.plot(rms, color='#3b4ba7', marker='o')
                 ax_point = health_assessment['health_states']['fast_degradation'][0]
                 plt.axhline(health_assessment['correlation_coefficients'][ax_point], color='red')
                 plt.axvline(ax_point, color='red')
@@ -86,7 +85,6 @@ class Functions:
                 fig.dpi = 200; fig.figsize = (11,11)
                 plt.plot(rms, 'C0')
                 plt.show()
-
 
         plot_functions = {
             'fft_plot': fft_plot,

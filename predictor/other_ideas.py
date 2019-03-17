@@ -455,3 +455,35 @@ if correlation_coefficient_window_mean < params['manual_threshold']:
                 bearing_marginal_spectrum.append([frequencies, spectrum])
 
             bearings_marginal_spectrum[str(current_bearing)] = bearing_marginal_spectrum
+
+
+
+
+
+            # Restoring data classes.
+
+            train_health_state_restored = []
+            for train_health_state in train_health_states:
+                if train_health_state == 0:
+                    train_health_state_restored.extend([[1, 0]])
+                else:
+                    train_health_state_restored.extend([[0, 1]])
+            
+            eval_health_state_restored = []
+            for eval_health_state in eval_health_states:
+                if eval_health_state == 0:
+                    eval_health_state_restored.extend([[1, 0]])
+                else:
+                    eval_health_state_restored.extend([[0, 1]])
+
+
+
+            # Shuffling data.
+            random_index = np.random.permutation(len(train_hht))
+            train_hht = np.array(train_hht)[random_index]
+            train_health_states = np.array(train_health_states)[random_index]
+
+
+                    #scaler = StandardScaler()
+        #for i, bearing_deep_features in enumerate(bearings_deep_features):
+        #    bearings_deep_features[i] = scaler.fit_transform(bearing_deep_features)

@@ -61,13 +61,12 @@ class NeuralNetworks():
 
         def forward(self, x):
             in_size = x.size(0)
-
             x = F.relu(self.pool(self.conv1(x)))
             x = F.relu(self.pool(self.conv2(x)))
             
-            x = x.view(in_size, -1)              # Flatten the tensor.
-            deep_features = F.relu(self.fc1(x))  # Saving fully connected layer output as deep_features.
-            cnn_output = self.fc2(deep_features) # Softmax is already computed in the loss function.
+            x = x.view(in_size, -1)                       # Flatten the tensor.
+            deep_features = self.fc1(x)                   # Saving first linear layer output as deep_features.
+            cnn_output = self.fc2(F.relu(deep_features))  # Softmax is already computed in the loss function.
 
             return [cnn_output, deep_features]
 
@@ -104,7 +103,7 @@ class NeuralNetworks():
 
     def create_models(self, data_processed, params):
         self.data_driven_models['cnn'] = self.CNN(params['cnn'])
-        self.data_driven_models['lstm'] = self.LSTM(params['lstm'])
+        #self.data_driven_models['lstm'] = self.LSTM(params['lstm'])
 
     def device_setting(self, cuda_available):
         
@@ -146,10 +145,9 @@ class NeuralNetworks():
         health_states_classes = []
 
         for normal_states, fast_degradation_states in zip(health_states['normal'], health_states['fast_degradation']):
-            
             normal_qty = normal_states[1] - normal_states[0] + 1
             fast_degradation_qty = fast_degradation_states[1] - fast_degradation_states[0] + 1
-
+            
             health_states_classes.extend([0]*normal_qty + [1]*fast_degradation_qty)
 
         return health_states_classes
@@ -170,7 +168,7 @@ class NeuralNetworks():
     
         deep_features_path = os.getcwd() + '/predictor/data/Processed_Data/cnn_model/deep_features'
         
-        #if(os.path.isfile(deep_features_path)):
+        #if os.path.isfile(deep_features_path):
         #    with open(deep_features_path, 'rb') as file:
         #        return pickle.load(file)
 
@@ -178,51 +176,66 @@ class NeuralNetworks():
         cnn_model.eval()
         bearings_deep_features = []
 
-        bearings_deep_feature_loader, _ = self.cnn_data(data_processed, models_params, predictor_params, 'deep_feature_extraction')
-
-        criterion = nn.CrossEntropyLoss()        
+        bearings_deep_feature_loader = self.cnn_data(data_processed, models_params, predictor_params, 'deep_feature_extraction')
+   
         for bearing_deep_feature_loader in bearings_deep_feature_loader:
             bearing_deep_features = []
             for i, (eval_feature, eval_output) in enumerate(bearing_deep_feature_loader):
+
                 # Passing data to device.
                 eval_feature, eval_output = eval_feature.to(device), eval_output.to(device)
 
                 # Forwarding data and getting deep features. Appending numpy arrays because tensors uses more memory.
                 bearing_deep_features.extend([x.detach().numpy() for x in cnn_model(eval_feature)[1]])
-                eval_output_ = cnn_model(eval_feature)[0]
-                loss = criterion(eval_output_, eval_output)
 
-
-                if i % 25 == 0:
+                if i % models_params['cnn_batch_size'] == 0:
                     print(models_params['cnn_batch_size']*(i+1), 'deep feature extracted.')
+            
+            # Calculating PCA of deep features.        
+            pca = PCA(n_components=3, svd_solver='full')
+            target = np.array(bearing_deep_feature_loader.dataset.target)
+            _, counts = np.unique(target, return_counts=True)
+
+            pca_components_normal = pca.fit_transform(bearing_deep_features[0:counts[0]])
+            pca_components_degradation = pca.fit_transform(bearing_deep_features[counts[0] + 1:counts[0] + counts[1]])
+            
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(pca_components_normal[:, 0], pca_components_normal[:, 1], pca_components_normal[:, 2])
+            ax.scatter(pca_components_degradation[:, 0], pca_components_degradation[:, 1], pca_components_degradation[:, 2])
+
+            ax.set_xlabel('Component 1')
+            ax.set_ylabel('Component 2')
+            ax.set_zlabel('Component 3')
+            plt.show()
+
             bearings_deep_features.append(bearing_deep_features)
-        
-        # Saving pre-processed hht_data.
+
+        # Saving deep features.
         with open(deep_features_path, 'wb') as file:
             pickle.dump(bearings_deep_features, file)
         
         data_processed['deep_features'] = bearings_deep_features
 
-        # Calculating PCA of deep features.
-        scaler = StandardScaler()
-        #import ipdb; ipdb.set_trace()
-        for i, bearing_deep_features in enumerate(bearings_deep_features):
-            bearings_deep_features[i] = scaler.fit_transform(bearing_deep_features)
+    def normalize_data(self, data):
+        data = np.array(data)
+        data_shape = data.shape
         
-        pca = PCA(n_components=3)
-        N = len(bearing_deep_features)
-        pca_components_normal = pca.fit_transform(bearings_deep_features[0][0:40])
-        pca_components_degradation = pca.fit_transform(bearings_deep_features[0][2760:2800])
-        
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        import ipdb; ipdb.set_trace()
-        ax.scatter(pca_components_normal[:, 0], pca_components_normal[:, 1], pca_components_normal[:, 2])
-        ax.scatter(pca_components_degradation[:, 0], pca_components_degradation[:, 1], pca_components_degradation[:, 2])
+        data_row = np.reshape(data, [1, data.size])[0]
 
-        plt.xlabel('component 1')
-        plt.ylabel('component 2')
-        plt.show()
+        data_max = np.amax(data_row)
+        data_min = np.amin(data_row)
+        
+        DIFF = data_max - data_min;  a, b = -1, 1;  norm_diff = b - a
+            
+        data_normalized = []
+        for value in data_row:
+            data_normalized.append(( norm_diff*(value - data_min) / DIFF ) + a)
+        
+        data_normalized = np.array(data_normalized)
+        data_normalized = np.reshape(data_normalized, data_shape)
+
+        return data_normalized.tolist()
 
     def cnn_data(self, data_processed, models_params, predictor_params, adjust_data_for):
 
@@ -236,41 +249,31 @@ class NeuralNetworks():
 
             # Classifing health_states and making health_states 1D.
             health_states = self.health_states_classes(health_states)
+
             # Saving hht_data shape to reshape for deep features.
             hht_data_shapes = [len(x) for x in hht_data]
             index_slices = []; index_slice = 0
             for shape in enumerate(hht_data_shapes):
                 index_slice += shape[1]
                 index_slices.append(index_slice) 
-
+            
             # Making hht_data files 1D and getting spectrum.
             hht_data = [files_hht for bearing_data in hht_data for files_hht in bearing_data[1]] 
-            
-            # Normalizing data.
-            #scaler = StandardScaler()
-            scaler = MinMaxScaler(feature_range=[-1,1])
-
-            for i, data in enumerate(hht_data):
-                hht_data[i] = scaler.fit_transform(np.reshape(hht_data[i], [-1, 1]))
-            
-            hht_data = np.squeeze(hht_data)
+    
+            # Scaling data [-1, 1].
+            hht_data = self.normalize_data(hht_data)
 
             # Saving hht_data at this point for deep features.
             with open(deep_features_hht_data_path, 'wb') as file:
                 pickle.dump([np.split(hht_data, index_slices[:-1]), np.split(health_states, index_slices[:-1])], file)
 
             # Splitting data into traning data and validation data.
-            train_hht, eval_hht, train_health_states, eval_health_states = train_test_split(hht_data, health_states, test_size=0.3, random_state=14, shuffle=True)
+            N = len(hht_data)
+            train_hht, eval_hht, train_health_states, eval_health_states = train_test_split(hht_data, health_states, test_size=0.3, random_state=42, shuffle=True)
 
             # Oversampling fast degradation class. Must be after data splitting. Otherwise, we could could end up with the same observation in both datasets.
-            # Selecting fast degradation data.
             #train_hht, train_health_states = SMOTE().fit_resample(train_hht, train_health_states)
             train_hht, train_health_states = RandomOverSampler().fit_resample(train_hht, train_health_states)
-
-            # Shuffling data.
-            random_index = np.random.permutation(len(train_hht))
-            train_hht = np.array(train_hht)[random_index]
-            train_health_states = np.array(train_health_states)[random_index]
             
             train_hht = [np.reshape(x, predictor_params['hht_cnn_shape']) for x in train_hht]
             eval_hht = [np.reshape(x, predictor_params['hht_cnn_shape']) for x in eval_hht]
@@ -292,14 +295,14 @@ class NeuralNetworks():
                 train_dataset,
                 batch_size=models_params['cnn_batch_size'],
                 shuffle=True,
-                num_workers=3,
+                num_workers=4,
             )
 
             eval_loader = DataLoader(
                 eval_dataset,
                 batch_size=models_params['cnn_batch_size'],
                 shuffle=True,
-                num_workers=3,
+                num_workers=4,
             )
 
             return train_loader, eval_loader
@@ -338,11 +341,11 @@ class NeuralNetworks():
                 DataLoader(
                     bearing_deep_feature_dataset,
                     batch_size=models_params['cnn_batch_size'],
-                    shuffle=True,
-                    num_workers=3,
+                    shuffle=False,
+                    num_workers=4,
                 ))
 
-            return bearings_deep_feature_loader, data[1]
+            return bearings_deep_feature_loader
 
     def cnn_train(self, data_processed, models_params, predictor_params, device): 
         
@@ -382,13 +385,13 @@ class NeuralNetworks():
 
                 # Forwarding data and getting prediction.
                 train_output_ = cnn_model(train_feature)[0]
-                
+
                 # Computing loss and ajusting CNN weights.
                 loss = criterion(train_output_, train_output)
                 
                 # Setting the parameter gradients to zero.
                 optimizer.zero_grad()
-                
+
                 # Ajusting the weights of CNN.
                 loss.backward(loss)
                 optimizer.step()
@@ -440,9 +443,9 @@ class NeuralNetworks():
             if epoch % 1 == 0:
                 end = time.time()
                 print('\nLoss Test %.4f' % running_loss)
-                print('Time %.2f' % (end - start), 's')
                 test_accuracy = (i - wrong_predictions) / i
                 print('Test accuracy %.4f' % test_accuracy, '\n')
+                print('Time %.2f' % (end - start), 's')
 
         # Saving model.
         torch.save(cnn_model.state_dict(), cnn_path)

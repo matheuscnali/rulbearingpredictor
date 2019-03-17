@@ -53,7 +53,7 @@ def generate():
         }
 
         health_assessment = {
-            'bearings': [0, 1, 2, 3, 4, 5, 6],
+            'bearings': [0],
             'vibration_signal': vibration_signal,
             'norm_interval': [-1, 1],
             'max_qty': 2,
@@ -71,7 +71,7 @@ def generate():
         }
 
         load_data_params = {
-            'load_data': True,
+            'load_data': False,
             'bearings': [0, 1, 2, 3, 4, 5, 6],
             'file_chunk_percentage': [0, 100]
         }
@@ -99,13 +99,12 @@ def generate():
         lstm_layers = OrderedDict([
             ('input', [25]),
             ('hidden', [1]),
-            ('batch_first', True),
-            ()
+            ('batch_first', True)
         ])
 
         models_params = {
             'cnn': cnn_layers,
-            'cnn_epochs': 30,
+            'cnn_epochs': 1,
             'cnn_batch_size': 20,
             'lstm': lstm_layers 
         }
@@ -114,7 +113,7 @@ def generate():
 
         predictor_params = {
             'bearings': [0],
-            'hht_cnn_shape': [1, 10, 128],
+            'hht_cnn_shape': [1, 128, 10],
             'return_cnn_model': False, # If you want to recover the model to train more, set False.
             'cuda_available': False #torch.cuda.is_available()
         }

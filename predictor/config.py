@@ -40,27 +40,27 @@ def generate():
         vibration_signal = 'vib_horizontal'
         
         hht_marginal_spectrum = {
-            'bearings': [0], # Bearings to be processed by this function. See PHM_dataset in data_tools.py to get bearings name.
+            'bearings': [0, 1, 2, 3, 4, 5, 6], # Bearings to be processed by this function. See PHM_dataset in data_tools.py to get bearings name.
             'sampling_frequency': 25600, # 25.6 KHz
             'vibration_signal': vibration_signal,
-            'imfs_qty': -4 # Using MAX number of imfs - 1.
+            'imfs_qty': -4 # Using MAX number of imfs - 4.
         }
 
         bearings_fft = {
-            'bearings': [0],
+            'bearings': [0, 1, 2, 3, 4, 5, 6],
             'sampling_frequency': 25600,
             'vibration_signal': vibration_signal
         }
 
         health_assessment = {
-            'bearings': [0],
+            'bearings': [0, 1, 2, 3, 4, 5, 6],
             'vibration_signal': vibration_signal,
             'norm_interval': [-1, 1],
             'max_qty': 2,
             'base_values_chunk_percentage': [0, 2],
             'hankel_window_size': 10,
             'smoothing_window_size': 9,
-            'manual_threshold': 0.9,
+            'manual_threshold': 0.95,
             'correlation_coefficient_method': 'base_values_mean' # or 'correlation_coefficient_values_mean'
         }
 
@@ -68,6 +68,11 @@ def generate():
             'bearings': [0, 1, 2, 3, 4, 5, 6],
             'smoothing_window_size': 7,
             'vibration_signal': vibration_signal,
+        }
+
+        rul_stop_threshold = {
+            'rms_stop_threshold': 4.47,
+            'recording_step_time': 10 # Seconds.
         }
 
         load_data_params = {
@@ -80,7 +85,7 @@ def generate():
             # ('bearings_fft', bearings_fft),
             ('hht_marginal_spectrum', hht_marginal_spectrum),
             ('health_assessment', health_assessment),
-            ('rms', rms)
+            ('rms', rms),
         ])
 
         """                    Models parameters                    """
@@ -112,7 +117,7 @@ def generate():
         """                     Predictor parameters                        """
 
         predictor_params = {
-            'bearings': [0],
+            'bearings': [0, 1, 2, 3, 4, 5, 6],
             'hht_cnn_shape': [1, 128, 10],
             'return_cnn_model': False, # If you want to recover the model to train more, set False.
             'cuda_available': False #torch.cuda.is_available()

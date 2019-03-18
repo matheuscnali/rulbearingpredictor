@@ -191,6 +191,10 @@ class NeuralNetworks():
                 if i % models_params['cnn_batch_size'] == 0:
                     print(models_params['cnn_batch_size']*(i+1), 'deep feature extracted.')
             
+            scaler = StandardScaler()
+            for i, bearing_deep_features in enumerate(bearings_deep_features):
+                bearings_deep_features[i] = scaler.fit_transform(bearing_deep_features)
+
             # Calculating PCA of deep features.        
             pca = PCA(n_components=3, svd_solver='full')
             target = np.array(bearing_deep_feature_loader.dataset.target)

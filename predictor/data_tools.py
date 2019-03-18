@@ -468,3 +468,33 @@ class Functions:
 
         return svd_norm_sequences
 
+    def rul_stop_threshold(self, data_processed):
+        
+        bearings_rms, bearings_health_assessment = data_processed['rms'], data_processed['health_assessment']
+        rms_stop_threshold = 4.47
+        recording_step_time = 10 # Seconds
+
+        # Calculating RUL for bearings that got stop threshold.
+        bearing_rul = []
+        for (_, bearing_rms), (_, bearing_health_assessment) in zip(bearings_rms.items(), bearings_health_assessment.items()):
+            # Looking for stop rms values in the degradation set.
+            degradation_index = np.arange(bearing_health_assessment['health_states']['fast_degradation'][0], bearing_health_assessment['health_states']['fast_degradation'][1] + 1)
+            for index, rms_vals in zip(degradation_index, bearing_rms[degradation_index]):
+                if rms_vals > rms_stop_threshold:
+                    bearing_rul.append((index - bearing_health_assessment['health_states']['fast_degradation'][0])*recording_step_time)
+                    break
+            else:
+                # Fitting polynomial and calculating stop threshold for bearing which didn't reach the stop threshold.
+                x = np.arange(len(degradation_index))
+                y = bearing_rms[degradation_index]
+
+                pol_coefs = np.polyfit(x, y, 3)
+                pol = np.poly1d(pol_coefs)
+
+                for val in range(10000):
+                    if pol(val) > rms_stop_threshold:
+                        bearing_rul.append(val*recording_step_time)
+                        break
+
+                    
+

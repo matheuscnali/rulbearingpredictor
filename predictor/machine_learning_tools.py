@@ -18,9 +18,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler 
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.over_sampling import SMOTE, ADASYN
+from torch.autograd import Variable
 from mpl_toolkits.mplot3d import Axes3D
 
 from torch.multiprocessing import Pool, Process, set_start_method
+
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 class NeuralNetworks():
     
@@ -50,6 +53,7 @@ class NeuralNetworks():
             return len(self.data)
 
     class CNN(nn.Module):
+       
         def __init__(self, params):
             super(NeuralNetworks.CNN, self).__init__()
 
@@ -71,39 +75,32 @@ class NeuralNetworks():
             return [cnn_output, deep_features]
 
     class LSTM(nn.Module):
-        def __init__(self, input_dim, hidden_dim, batch_size, output_dim=1, num_layers=2):
+       
+        def __init__(self, params):
             super(NeuralNetworks.LSTM, self).__init__()
-            self.input_dim = input_dim
-            self.hidden_dim = hidden_dim
-            self.batch_size = batch_size
-            self.num_layers = num_layers
+            self.input_size = params['input']
+            self.hidden_size = params['hidden']
 
-            # Define the LSTM layer.
-            self.lstm = nn.LSTM(self.input_dim, self.hidden_dim, self.num_layers)
-
-            # Define the output layer.
-            self.linear = nn.Linear(self.hidden_dim, output_dim)
+            self.lstm = nn.LSTM(self.input_size, self.hidden_size)
+            #self.fc = nn.Linear(*params['linear'])
+            self.init_hidden()
 
         def init_hidden(self):
-            # This is what we'll initialise our hidden state as.
-            return (torch.zeros(self.num_layers, self.batch_size, self.hidden_dim),
-                    torch.zeros(self.num_layers, self.batch_size, self.hidden_dim))
+            self.h_c = torch.zeros(1, 1, self.hidden_size)
+            self.c_t = torch.zeros(1, 1, self.hidden_size)
 
-        def forward(self, input):
-            # Forward pass through LSTM layer.
-            # shape of lstm_out: [input_size, batch_size, hidden_dim].
-            # shape of self.hidden: (a, b), where a and b both.
-            # have shape (num_layers, batch_size, hidden_dim).
-            lstm_out, self.hidden = self.lstm(input.view(len(input), self.batch_size, -1))
+        def forward(self, x):      
+
+            # Inserting a dimension of size one (sequence/sample dimension).
+            x_ = torch.unsqueeze(x, 0)
             
-            # Only take the output from the final timestep.
-            # Can pass on the entirety of lstm_out to the next layer if it is a seq2seq prediction.
-            y_pred = self.linear(lstm_out[-1].view(self.batch_size, -1))
-            return y_pred.view(-1)
+            lstm_output, (self.h_c, self.c_t) = self.lstm(x_, (self.h_c, self.c_t))
 
+            return torch.tensor(lstm_output, requires_grad=True)
+            
     def create_models(self, data_processed, params):
         self.data_driven_models['cnn'] = self.CNN(params['cnn'])
-        #self.data_driven_models['lstm'] = self.LSTM(params['lstm'])
+        self.data_driven_models['lstm'] = self.LSTM(params['lstm'])
 
     def device_setting(self, cuda_available):
         
@@ -164,13 +161,17 @@ class NeuralNetworks():
         # Extract deep features.
         self.cnn_deep_features(data_processed, models_params, predictor_params, device)
 
+        # Train or load saved LSTM model.
+        self.lstm_train(data_processed, models_params, predictor_params, device)
+
     def cnn_deep_features(self, data_processed, models_params, predictor_params, device):
     
         deep_features_path = os.getcwd() + '/predictor/data/Processed_Data/cnn_model/deep_features'
         
-        #if os.path.isfile(deep_features_path):
-        #    with open(deep_features_path, 'rb') as file:
-        #        return pickle.load(file)
+        if os.path.isfile(deep_features_path):
+            with open(deep_features_path, 'rb') as file:
+                data_processed['deep_features'] = pickle.load(file)
+                return
 
         cnn_model = self.data_driven_models['cnn']
         cnn_model.eval()
@@ -191,9 +192,9 @@ class NeuralNetworks():
                 if i % models_params['cnn_batch_size'] == 0:
                     print(models_params['cnn_batch_size']*(i+1), 'deep feature extracted.')
             
-            scaler = StandardScaler()
-            for i, bearing_deep_features in enumerate(bearings_deep_features):
-                bearings_deep_features[i] = scaler.fit_transform(bearing_deep_features)
+            #scaler = StandardScaler()
+            #for i, bearing_deep_features in enumerate(bearings_deep_features):
+            #    bearings_deep_features[i] = scaler.fit_transform(bearing_deep_features)
 
             # Calculating PCA of deep features.        
             pca = PCA(n_components=3, svd_solver='full')
@@ -211,9 +212,10 @@ class NeuralNetworks():
             ax.set_xlabel('Component 1')
             ax.set_ylabel('Component 2')
             ax.set_zlabel('Component 3')
-            plt.show()
-
+            #plt.show()
+            bearing_deep_features = np.array(bearing_deep_features)
             bearings_deep_features.append(bearing_deep_features)
+        bearings_deep_features = np.array(bearings_deep_features)
 
         # Saving deep features.
         with open(deep_features_path, 'wb') as file:
@@ -246,6 +248,11 @@ class NeuralNetworks():
         deep_features_hht_data_path = os.getcwd() + '/predictor/data/Processed_Data/cnn_model/deep_feature_hht_data'
 
         if adjust_data_for == 'trainning':
+            cnn_data_trainning_path = os.getcwd() + '/predictor/data/Processed_Data/cnn_model/trainning_data'
+
+            if os.path.isfile(cnn_data_trainning_path):
+                with open(cnn_data_trainning_path, 'rb') as file:
+                    return pickle.load(file)
             
             # Getting processed data from all bearings.
             health_states = self.bearings_data_join(data_processed, 'health_assessment', predictor_params)
@@ -255,7 +262,7 @@ class NeuralNetworks():
             health_states = self.health_states_classes(health_states)
 
             # Saving hht_data shape to reshape for deep features.
-            hht_data_shapes = [len(x) for x in hht_data]
+            hht_data_shapes = [len(x[1]) for x in hht_data]
             index_slices = []; index_slice = 0
             for shape in enumerate(hht_data_shapes):
                 index_slice += shape[1]
@@ -309,10 +316,19 @@ class NeuralNetworks():
                 num_workers=4,
             )
 
+            # Saving CNN trainning loaders.
+            with open(cnn_data_trainning_path, 'wb') as file:
+                pickle.dump((train_loader, eval_loader), file)
+
             return train_loader, eval_loader
 
         elif adjust_data_for == 'deep_feature_extraction':
-           
+            deep_features_loader_path = os.getcwd() + '/predictor/data/Processed_Data/cnn_model/deep_features_loader'
+
+            if os.path.isfile(deep_features_loader_path):
+                with open(deep_features_loader_path, 'rb') as file:
+                    return pickle.load(file)
+
            # Loading saved deep_features_hht_data.
             if(os.path.isfile(deep_features_hht_data_path)):
                 with open(deep_features_hht_data_path, 'rb') as file:
@@ -349,10 +365,14 @@ class NeuralNetworks():
                     num_workers=4,
                 ))
 
+            # Saving CNN deep features loaders.
+            with open(deep_features_loader_path, 'wb') as file:
+                pickle.dump(bearings_deep_feature_loader, file)
+
             return bearings_deep_feature_loader
 
     def cnn_train(self, data_processed, models_params, predictor_params, device): 
-        
+        return
         cnn_path = os.getcwd() + '/predictor/data/Processed_Data/cnn_model/cnn_model'
 
         # Loading saved model and hht_data pre-processed.
@@ -454,9 +474,139 @@ class NeuralNetworks():
         # Saving model.
         torch.save(cnn_model.state_dict(), cnn_path)
 
-    def lstm_train(self, data_processed, models_params, predictor_params, device):
-        pass
+    def lstm_data(self, data_processed, models_params, predictor_params):
+        
+        deep_features = np.array(data_processed['deep_features'])
+        rul = data_processed['rul']
 
+        # Selecting deep features from fast degradation data.
+        for i, (_, bearing_health_assessment) in enumerate(data_processed['health_assessment'].items()):
+            fast_degradation = np.arange(bearing_health_assessment['health_states']['fast_degradation'][0], bearing_health_assessment['health_states']['fast_degradation'][1] + 1)
+            deep_features[i] = deep_features[i][fast_degradation]
+
+        """
+        This part makes len(deep_features[i]) == len(rul[i])
+        This is done because of 2 situations.
+        1st - Bearing RMS pass the stop rms threshold.
+        2nd - Bearing RMS don't pass the stop rms threshold (RMS data fitted in a polynomial to get RUL).
+        
+        For 1st, there are more deep features than RUL values because the we have more data after RUL = 0.
+        For 2nd, there are less deep fetaures than RUL values because the test was stopped before the stop RUL threshold.
+        """
+
+        # Building rul array.
+        for i, bearing_rul in enumerate(rul):
+            rul[i] = np.arange(bearing_rul, 0, step=-10)
+
+        # Slicing both to have the same length.
+        for i, (bearing_rul, bearing_deep_features) in enumerate(zip(rul, deep_features)):
+            min_len = min(len(bearing_rul), len(bearing_deep_features))
+            rul[i] = rul[i][0:min_len]; deep_features[i] = deep_features[i][0:min_len]
+
+        train_deep_features = deep_features[1:]; eval_deep_features = deep_features[0]
+        train_rul = rul[1:]; eval_rul = rul[0]
+
+        # Concatenating data to make 1D array and reshaping deep features.
+        train_deep_features = np.concatenate(train_deep_features)
+        train_rul = np.concatenate(train_rul)
+        
+        # Creating tensors.
+        if predictor_params['cuda_available']: 
+            train_deep_features, eval_deep_features = torch.cuda.FloatTensor(train_deep_features), torch.cuda.FloatTensor(eval_deep_features)
+            train_rul, eval_rul = torch.cuda.FloatTensor(train_rul), torch.cuda.FloatTensor(eval_rul)
+        else:
+            train_deep_features, eval_deep_features = torch.FloatTensor(train_deep_features), torch.FloatTensor(eval_deep_features)
+            train_rul, eval_rul = torch.FloatTensor(train_rul), torch.FloatTensor(eval_rul)
+
+        # Creating datasets.
+        train_dataset = self.ModelsDataset(train_deep_features, train_rul)
+        eval_dataset = self.ModelsDataset(eval_deep_features, eval_rul)
+        
+        # Creating data loaders.
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=models_params['lstm_batch_size'],
+            shuffle=False,
+            num_workers=4,
+        )
+
+        eval_loader = DataLoader(
+            eval_dataset,
+            batch_size=models_params['lstm_batch_size'],
+            shuffle=False,
+            num_workers=4,
+        )
+
+        return train_loader, eval_loader
+
+    def lstm_train(self, data_processed, models_params, predictor_params, device):
+        
+        lstm_path = os.getcwd() + '/predictor/data/Processed_Data/lstm_model/lstm_model'
+        train_loader, eval_loader = self.lstm_data(data_processed, models_params, predictor_params)
+
+        lstm_model = self.data_driven_models['lstm']
+        lstm_model = lstm_model.to(device)
+
+        criterion = nn.MSELoss()
+        
+        for epoch in range(models_params['cnn_epochs']):
+            optimizer = optim.SGD(lstm_model.parameters(), lr=self.adjust_learning_rate(epoch))
+
+            if epoch % 1 == 0:
+                start = time.time()
+
+            # Setting model to trainning mode.
+            lstm_model.train()
+            running_loss = 0.0
+            
+            for i, (train_feature, train_output) in enumerate(train_loader):
+
+                # Passing data to device.
+                train_feature, train_output = train_feature.to(device), train_output.to(device)
+
+                # Forwarding data and getting prediction.
+                train_output_ = lstm_model(train_feature)
+
+                # Computing loss.
+                loss = criterion(train_output_, train_output)
+
+                # Setting the parameter gradients to zero.
+                optimizer.zero_grad()
+
+                # Ajusting the weights of LSTM.
+                loss.backward(loss)
+                optimizer.step()
+
+                # Averaging running_loss.
+                running_loss = (running_loss*i + loss.item())/(i+1)
+            
+            if epoch % 1 == 0:
+                print('Epoch', epoch)
+                print('Loss Train %.4f' % running_loss)
+            
+            # Setting model to evaluation mode.
+            lstm_model.eval()
+            running_loss = 0.0
+            for i, (eval_feature, eval_output) in enumerate(eval_loader):
+
+                # Passing data to device.
+                eval_feature, eval_output = eval_feature.to(device), eval_output.to(device)
+
+                # Forwarding data and getting prediction.
+                eval_output_ = lstm_model(eval_feature)
+                loss = criterion(eval_output_, eval_output)
+
+                # Averaging running_loss.
+                running_loss = (running_loss*i + loss.item())/(i+1)
+                        
+            if epoch % 1 == 0:
+                end = time.time()
+                print('Loss Test %.4f' % running_loss)
+                print('Time %.2f' % (end - start), 's\n')
+
+        # Saving model.
+        torch.save(lstm_model.state_dict(), lstm_path)
+                
     def adjust_learning_rate(self, epoch):
         lr = 0.001
 

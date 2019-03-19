@@ -23,7 +23,7 @@ class Predictor:
             self.data_processed[function_name] = getattr(self.data_F, function_name) \
                                                  (self.dataset, data_processing_params[function_name])
             
-        self.data_F.rul_stop_threshold(self.data_processed)
+        self.data_processed['rul'] = self.data_F.rul_stop_threshold(self.data_processed)
 
     def predict(self, models_params, predictor_params):
         self.neural_networks.create_models(self.data_processed, models_params)
@@ -39,11 +39,13 @@ def main():
 
     for method in CONF['method_list']:
         if method.load_data_params['load_data']:
+            print('Loading bearings data.')
             predictor.dataset.load_bearing_data(predictor.dataset, method.load_data_params)
-        
+        print('Processing data.')
         predictor.data_processing(method.data_processing_params)
-        #predictor.predict(method.models_params, method.predictor_params)
-        predictor.results(method.show_results_params)
+        print('Estimating RUL.')
+        predictor.predict(method.models_params, method.predictor_params)
+        #predictor.results(method.show_results_params)
 
 if __name__ == '__main__':
     main()

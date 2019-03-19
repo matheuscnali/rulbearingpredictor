@@ -487,3 +487,8 @@ if correlation_coefficient_window_mean < params['manual_threshold']:
                     #scaler = StandardScaler()
         #for i, bearing_deep_features in enumerate(bearings_deep_features):
         #    bearings_deep_features[i] = scaler.fit_transform(bearing_deep_features)
+
+
+
+        M = len(bearing_rms); N = len(degradation_index)
+        fitting_index = np.arange(M - 2*N, M - 1) # Just setting some interval to fit a polynomial.

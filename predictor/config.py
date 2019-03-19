@@ -102,15 +102,16 @@ def generate():
         ])
 
         lstm_layers = OrderedDict([
-            ('input', [25]),
-            ('hidden', [1]),
-            ('batch_first', True)
+            ('input', deep_features_qty),
+            ('hidden', 1),
+            #('linear', [5, 1])
         ])
 
         models_params = {
             'cnn': cnn_layers,
-            'cnn_epochs': 1,
+            'cnn_epochs': 100,
             'cnn_batch_size': 20,
+            'lstm_batch_size': 1,
             'lstm': lstm_layers 
         }
 

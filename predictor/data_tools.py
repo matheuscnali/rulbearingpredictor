@@ -21,6 +21,8 @@ from scipy.signal import hilbert
 from scipy.misc import derivative
 from collections import OrderedDict
 from numpy.fft import fft, fftfreq, ifft
+from numpy.polynomial.polynomial import Polynomial
+from numpy.polynomial.polynomial import polyval
 
 from config import CONF
 
@@ -459,7 +461,7 @@ class Functions:
             # Calculating remaining time.
             end = time.time()
             loop_time = (loop_time*i + (end-ini))/(i+1); remaining_time = loop_time * (files_size - i)
-            
+
             if i%10 == 0:
                 print('SVD - Processed ', i+1,' of ', files_size,' files.', int(remaining_time/60), 'minutes reamining.')
 
@@ -476,6 +478,7 @@ class Functions:
 
         # Calculating RUL for bearings that got stop threshold.
         bearing_rul = []
+        
         for (_, bearing_rms), (_, bearing_health_assessment) in zip(bearings_rms.items(), bearings_health_assessment.items()):
             # Looking for stop rms values in the degradation set.
             degradation_index = np.arange(bearing_health_assessment['health_states']['fast_degradation'][0], bearing_health_assessment['health_states']['fast_degradation'][1] + 1)
@@ -485,16 +488,28 @@ class Functions:
                     break
             else:
                 # Fitting polynomial and calculating stop threshold for bearing which didn't reach the stop threshold.
-                x = np.arange(len(degradation_index))
-                y = bearing_rms[degradation_index]
+                N = len(degradation_index)
+                x = np.arange(N-N//3) # Adjusting the data for the fitting function.
+                y = bearing_rms[degradation_index][N//3:N]
+                
+                pol_coefs2, [resid2, _, _, _] = Polynomial.fit(x, y, 2, full=True)
+                pol_coefs3, [resid3, _, _, _] = Polynomial.fit(x, y, 3, full=True)
 
-                pol_coefs = np.polyfit(x, y, 3)
-                pol = np.poly1d(pol_coefs)
+                # Selecting the polynomial with lowest fitting error.
+                if resid2 > resid3:
+                    pol_coefs = pol_coefs3
+                else:
+                    pol_coefs = pol_coefs2
+                
+                #plt.plot(x, y)
+                #plt.plot(polyval(np.arange(len(x)), pol_coefs.convert().coef))
+                #plt.show()
 
                 for val in range(10000):
-                    if pol(val) > rms_stop_threshold:
+                    if polyval(val, pol_coefs.convert().coef) > rms_stop_threshold:
                         bearing_rul.append(val*recording_step_time)
                         break
-
+        
+        return bearing_rul
                     
 

@@ -507,7 +507,7 @@ class Functions:
 
                 for val in range(10000):
                     if polyval(val, pol_coefs.convert().coef) > rms_stop_threshold:
-                        bearing_rul.append(val*recording_step_time)
+                        bearing_rul.append((N//3 + val)*recording_step_time) #Check if it's correct to do N//3 + val (It's because of the y selection [N//3:N])
                         break
         
         return bearing_rul

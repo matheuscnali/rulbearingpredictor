@@ -102,19 +102,19 @@ def generate():
         ])
 
         lstm_layers = OrderedDict([
-            ('input', deep_features_qty),
-            ('hidden', 5),
-            ('num_layers', 1),
+            ('input', 25),
+            ('hidden', 10),
+            ('num_layers', 10),
             ('dropout', 0),
-            ('linear', [5, 1]),
-            ('batch_size', 6)
+            ('linear', [10, 1]),
+            ('batch_size', 1)
         ])
 
         models_params = {
             'cnn': cnn_layers,
             'cnn_epochs': 10000,
             'cnn_batch_size': 20,
-            'train_lstm_batch_size': 6,
+            'train_lstm_batch_size': 1,
             'eval_lstm_batch_size': 1,
             'lstm': lstm_layers 
         }
@@ -122,6 +122,7 @@ def generate():
         """                     Predictor parameters                        """
 
         predictor_params = {
+            'recording_step_time': 10,
             'bearings': [0, 1, 2, 3, 4, 5, 6],
             'hht_cnn_shape': [1, 128, 10],
             'return_cnn_model': True, # If you want to recover the model to train more, set False.

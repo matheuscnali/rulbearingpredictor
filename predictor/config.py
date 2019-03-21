@@ -103,15 +103,19 @@ def generate():
 
         lstm_layers = OrderedDict([
             ('input', deep_features_qty),
-            ('hidden', 1),
-            #('linear', [5, 1])
+            ('hidden', 5),
+            ('num_layers', 1),
+            ('dropout', 0),
+            ('linear', [5, 1]),
+            ('batch_size', 6)
         ])
 
         models_params = {
             'cnn': cnn_layers,
-            'cnn_epochs': 100,
+            'cnn_epochs': 10000,
             'cnn_batch_size': 20,
-            'lstm_batch_size': 1,
+            'train_lstm_batch_size': 6,
+            'eval_lstm_batch_size': 1,
             'lstm': lstm_layers 
         }
 
@@ -120,7 +124,7 @@ def generate():
         predictor_params = {
             'bearings': [0, 1, 2, 3, 4, 5, 6],
             'hht_cnn_shape': [1, 128, 10],
-            'return_cnn_model': False, # If you want to recover the model to train more, set False.
+            'return_cnn_model': True, # If you want to recover the model to train more, set False.
             'cuda_available': False #torch.cuda.is_available()
         }
 

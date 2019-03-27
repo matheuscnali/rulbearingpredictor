@@ -43,7 +43,7 @@ def generate():
             'bearings': [0, 1, 2, 3, 4, 5, 6], # Bearings to be processed by this function. See PHM_dataset in data_tools.py to get bearings name.
             'sampling_frequency': 25600, # 25.6 KHz
             'vibration_signal': vibration_signal,
-            'imfs_qty': -4 # Using MAX number of imfs - 4.
+            'imfs_qty': -1 # Using MAX number of imfs - 1.
         }
 
         bearings_fft = {
@@ -76,13 +76,13 @@ def generate():
         }
 
         load_data_params = {
-            'load_data': False,
+            'load_data': True,
             'bearings': [0, 1, 2, 3, 4, 5, 6],
             'file_chunk_percentage': [0, 100]
         }
 
         data_processing_params = OrderedDict([
-            # ('bearings_fft', bearings_fft),
+            ('bearings_fft', bearings_fft),
             ('hht_marginal_spectrum', hht_marginal_spectrum),
             ('health_assessment', health_assessment),
             ('rms', rms),
@@ -97,26 +97,29 @@ def generate():
             ('conv1', [1, 64, 2, 1]),    #in_channels, out_channels, kernel_size, stride.
             ('pool', [2]),               #kernel_size.
             ('conv2', [64, 128, 2, 1]),  #in_channels, out_channels, kernel_size, stride.
-            ('linear1', [3968, deep_features_qty]),
+            ('linear1', [8064, deep_features_qty]),
             ('linear2', [deep_features_qty, 2]),    
         ])
 
         lstm_layers = OrderedDict([
             ('input', 25),
-            ('hidden', 10),
-            ('num_layers', 10),
+            ('hidden', 5),
+            ('num_layers', 1),
             ('dropout', 0),
-            ('linear', [10, 1]),
+            ('linear', [5, 1]),
             ('batch_size', 1)
         ])
 
         models_params = {
             'cnn': cnn_layers,
-            'cnn_epochs': 10000,
+            'cnn_epochs': 3,
+            'lstm_epochs': 10000,
+            'cnn_data_type': 'imfs_hilbert_spectrum',
             'cnn_batch_size': 20,
             'train_lstm_batch_size': 1,
+            'lstm_window_size': 5,
             'eval_lstm_batch_size': 1,
-            'lstm': lstm_layers 
+            'lstm': lstm_layers
         }
 
         """                     Predictor parameters                        """
@@ -124,8 +127,8 @@ def generate():
         predictor_params = {
             'recording_step_time': 10,
             'bearings': [0, 1, 2, 3, 4, 5, 6],
-            'hht_cnn_shape': [1, 128, 10],
-            'return_cnn_model': True, # If you want to recover the model to train more, set False.
+            'hht_cnn_shape': [1, 40, 32],
+            'return_cnn_model': False, # If you want to recover the model to train more, set False.
             'cuda_available': False #torch.cuda.is_available()
         }
 
@@ -135,7 +138,6 @@ def generate():
             'results_to_show': ['hht_marginal_spectrum', 'health_assessment']
         }    
         
-
         return [name, load_data_params, data_processing_params, models_params, predictor_params, show_results_params]
 
     conf['method_list'].append(Method(*method1()))

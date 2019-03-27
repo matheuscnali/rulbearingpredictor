@@ -492,3 +492,13 @@ if correlation_coefficient_window_mean < params['manual_threshold']:
 
         M = len(bearing_rms); N = len(degradation_index)
         fitting_index = np.arange(M - 2*N, M - 1) # Just setting some interval to fit a polynomial.
+
+
+                # Getting the RUL values for prediction.
+        RUL_for_prediciton = []
+        for bearing_rul in train_rul:
+            bearing_RUL_for_prediciton = []
+            for i, rul_subseq in enumerate(bearing_rul): 
+                bearing_RUL_for_prediciton.append(rul_subseq[-1])
+            RUL_for_prediciton.append(bearing_RUL_for_prediciton)
+        train_rul = RUL_for_prediciton

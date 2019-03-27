@@ -124,6 +124,8 @@ class DataSet:
 class Functions:
 
     def bearings_fft(self, dataset, params):
+        
+        # Setting data_path and checking if it's needed to compute this function for more bearings.
         processed_data_path = 'bearings_fft/bearings_fft'
         bearings_fft = dataset.load_processed_data(dataset, processed_data_path)
         bearings_not_processed = params['bearings']
@@ -136,7 +138,8 @@ class Functions:
 
             if bearings_fft_not_processed == []:
                 return bearings_fft
-            
+
+        # If can't find any saved file.    
         else:
             bearings_fft = OrderedDict()
         
@@ -150,7 +153,6 @@ class Functions:
                 data = bearing_file[params['vibration_signal']].values
                 
                 N = len(data)
-                #freqs = fftfreq(N)*(N/fs)
                 freqs = np.arange(N)*(fs/N)
                 freqs = freqs[0:int(N//2)]
                 mask = freqs > 0
@@ -168,7 +170,8 @@ class Functions:
         return bearings_fft
 
     def hht_marginal_spectrum(self, dataset, params):
-
+        
+        # Setting data_path and checking if it's needed to compute this function for more bearings.
         processed_data_path = 'hht_marginal_spectrum/hht_marginal_spectrum'
         bearings_marginal_spectrum = dataset.load_processed_data(dataset, processed_data_path)
         bearings_not_processed = params['bearings']
@@ -181,7 +184,8 @@ class Functions:
 
             if bearings_not_processed == []:
                 return bearings_marginal_spectrum
-
+        
+        # If can't find any saved file.
         else:
             bearings_marginal_spectrum = {}
 
@@ -214,10 +218,10 @@ class Functions:
                     imfs_freqs_file.append(pyhht.utils.inst_freq(imf_ht_file)[0] * fs) # [0] to select the frequencies. * fs because the inst_freq return normalized freqs.
                 imfs_freqs_files.append(imfs_freqs_file)
 
-            # Calculating absolute value.
+            # Calculating absolute value and scaling by 1/N factor.
             N = len(imfs_ht_file[0])
             imfs_envelope_files = np.abs(imfs_ht_files) / N
-
+            
             # Putting frequencies into the frequency bins and computing Hilbert Marginal Spectrum.
             imfs_envelope_files_bins = [] 
             for imfs_freqs_file, imfs_envelope_file in zip(imfs_freqs_files, imfs_envelope_files):
@@ -234,18 +238,20 @@ class Functions:
 
                 imfs_envelope_files_bins.append(imfs_envelope_file_bins)
 
-            # Summing Hilbert Marginal Spectrum of [0:params['imfs_qty]] imfs.
+            # Summing Hilbert Marginal Spectrum of [0 : params['imfs_qty]] imfs.
             for imfs_envelope_file_bins in imfs_envelope_files_bins:
                  bearing_marginal_spectrum.append([sum(x) for x in zip(*imfs_envelope_file_bins[0:params['imfs_qty']])])
 
-            bearings_marginal_spectrum[str(current_bearing)] = [freq_bins, bearing_marginal_spectrum]
+            # Saving frequencies, marginal spectrum and hilbert spectrum.
+            bearings_marginal_spectrum[str(current_bearing)] = [freq_bins, bearing_marginal_spectrum, imfs_envelope_files_bins]
             
         dataset.save_processed_data(bearings_marginal_spectrum, processed_data_path)
 
         return bearings_marginal_spectrum
 
     def health_assessment(self, dataset, params):
-
+        
+        # Setting data_path and checking if it's needed to compute this function for more bearings.
         processed_data_path = 'health_assessment/health_assessment'
         bearings_health_data = dataset.load_processed_data(dataset, processed_data_path)
         bearings_not_processed = params['bearings']
@@ -302,9 +308,8 @@ class Functions:
     def states_assesment(self, bearings_health_data, params):
         
         for _, health_data in bearings_health_data.items():
-
-            index_separator_candidate = -1
-
+            
+            index_separator_candidate = -1 # Aux variable.
             for i, correlation_coefficient in enumerate(health_data['correlation_coefficients']):
 
                 if correlation_coefficient < params['manual_threshold'] and index_separator_candidate == -1:
@@ -452,6 +457,7 @@ class Functions:
             """Hankel matrix size reference: Mahmoudvand, R. and Zokaei, M., 2012. On the singular values of the Hankel matrix with application in singular spectrum analysis. Chilean Journal of Statistics, 3(1), pp.43-56."""
             N = len(data); L = params['hankel_window_size'] # L = int(N//4) # K = N - L + 1 
             c = data[0:L]; r = data[L-1:N] 
+            
             # Computing hankel matrix.
             hankel_matrix = hankel(c, r)
 
@@ -463,14 +469,19 @@ class Functions:
             loop_time = (loop_time*i + (end-ini))/(i+1); remaining_time = loop_time * (files_size - i)
 
             if i%10 == 0:
-                print('SVD - Processed ', i+1,' of ', files_size,' files.', int(remaining_time/60), 'minutes reamining.')
+                print('SVD - Processed ', i+1,' of ', files_size,' files.', int(remaining_time / 60), 'minutes reamining.')
 
         # Normalizing to [-1, 1]
         svd_norm_sequences = self.normalize_data(svd_sequences, params)
 
         return svd_norm_sequences
 
-    def rul_stop_threshold(self, data_processed):
+    def rul_stop_threshold(self, dataset, data_processed):
+
+        processed_data_path = 'rul_stop_threshold/rul_stop_threshold'
+        rul_stop_threshold = dataset.load_processed_data(dataset, processed_data_path)
+        if rul_stop_threshold[0]:
+            return rul_stop_threshold[1]
         
         bearings_rms, bearings_health_assessment = data_processed['rms'], data_processed['health_assessment']
         rms_stop_threshold = 4.47
@@ -507,9 +518,10 @@ class Functions:
 
                 for val in range(10000):
                     if polyval(val, pol_coefs.convert().coef) > rms_stop_threshold:
-                        bearing_rul.append((N//3 + val)*recording_step_time) #Check if it's correct to do N//3 + val (It's because of the y selection [N//3:N])
+                        bearing_rul.append((N//3 + val)*recording_step_time) # Check if it's correct to do N//3 + val (It's because of the y selection [N//3:N])
                         break
-        
+
+        dataset.save_processed_data(bearing_rul, processed_data_path)
+
         return bearing_rul
                     
-

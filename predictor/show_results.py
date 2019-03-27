@@ -34,10 +34,10 @@ class Functions:
             
             data = data_processed['hht_marginal_spectrum']
     
-            for bearing_name, bearing_marginal_spectrum in data.items():
+            for _, bearing_marginal_spectrum in data.items():
                 
                 N = len(bearing_marginal_spectrum)
-                ini = 1; middle = int(1900); end = int(2765)
+                ini = 1; middle = int(N//2); end = int(N-10)
                 spectrum1 = bearing_marginal_spectrum[1][ini]
                 spectrum2 = bearing_marginal_spectrum[1][middle]
                 spectrum3 = bearing_marginal_spectrum[1][end]
@@ -47,15 +47,15 @@ class Functions:
                 fig.dpi = 290; fig.figsize = (11,11)
                 ax[0].plot(freqs, spectrum1, color='#3b4ba7')
                 ax[0].set_xlim(6000, 12500, 'c')
-                ax[0].set_ylim(0, 0.006)
+                ax[0].set_ylim(0, 0.005)
                 
                 ax[1].plot(freqs, spectrum2, color='#3b4ba7')
                 ax[1].set_xlim(6000, 12500, 'c')
-                ax[1].set_ylim(0, 0.006)
+                ax[1].set_ylim(0, 0.005)
 
                 ax[2].plot(freqs, spectrum3, color='#3b4ba7')
                 ax[2].set_xlim(6000, 12500, 'c')
-                ax[2].set_ylim(0, 0.008)
+                ax[2].set_ylim(0, 0.005)
                 
                 plt.show()
             

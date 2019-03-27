@@ -23,7 +23,7 @@ class Predictor:
             self.data_processed[function_name] = getattr(self.data_F, function_name) \
                                                  (self.dataset, data_processing_params[function_name])
             
-        self.data_processed['rul'] = self.data_F.rul_stop_threshold(self.data_processed)
+        self.data_processed['rul'] = self.data_F.rul_stop_threshold(self.dataset, self.data_processed)
 
     def predict(self, models_params, predictor_params):
         self.neural_networks.create_models(self.data_processed, models_params)

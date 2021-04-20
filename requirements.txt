@@ -43,7 +43,7 @@ pox==0.2.5
 ppft==1.6.4.9
 prompt-toolkit==2.0.9
 ptyprocess==0.6.0
-py==1.7.0
+py==1.10.0
 pyemd==0.5.1
 Pygments==2.3.1
 pyhht==0.1.0
